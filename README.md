@@ -39,7 +39,7 @@ This creates a **flow state** where you're rapidly confirming correct suggestion
 ## Features
 
 ### Interactive Labeling UI
-- **Keyboard-First Design**: `J` to accept, `I` to correct, `Alt+Arrow` for history
+- **Keyboard-First Design**: `Shift+Enter` to accept, `I` to correct, `Shift+Arrow` for history
 - **Smart Autocomplete**: Learns from your labels in real-time
 - **WebGL Scatter Plot**: See your labeled clusters emerge in 2D space
 - **Real-time Logs**: Watch the system learn via WebSocket stream
@@ -67,7 +67,7 @@ Open `http://localhost:5173` and start labeling!
 ### Basic Workflow
 
 1. **Bootstrap Phase**: Type a few initial labels to teach the system
-2. **Flow Phase**: Press `J` to accept suggestions and chain through clusters
+2. **Flow Phase**: Press `Shift+Enter` to accept suggestions and chain through clusters
 3. **Correction**: Press `I` when suggestion is wrong, type correct label
 4. **Repeat**: Watch the scatter plot fill with colored clusters
 

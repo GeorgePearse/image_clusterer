@@ -57,8 +57,8 @@ The frontend provides an optimized labelling interface designed for speed and mi
 **Key Features:**
 
 - **Blended Input Interface**: Single input field handles both label confirmation and correction
-- **Keyboard-First Design**: `Shift+Enter` for instant confirmation, `J` to accept suggestions
-- **History Navigation**: `Alt+←/→` to review and correct previous labels
+- **Keyboard-First Design**: `Shift+Enter` for instant confirmation
+- **History Navigation**: `Shift+←/→` to review and correct previous labels
 - **Real-time Visualization**: WebGL scatter plot shows embedding space with color-coded labels
 - **WebSocket Logs**: Live streaming of backend training events
 
@@ -181,10 +181,10 @@ The core innovation enabling rapid labelling:
 │                    │                                            │
 │                    ▼                                            │
 │  4. Frontend shows Image B with suggestion                     │
-│     "Is it Cat? [J] Accept"                                    │
+│     "Is it Cat? [Shift+Enter] Accept"                          │
 │                    │                                            │
 │                    ▼                                            │
-│  5. User presses J or Shift+Enter                              │
+│  5. User presses Shift+Enter                                   │
 │     → Instant confirmation                                      │
 │                    │                                            │
 │                    ▼                                            │

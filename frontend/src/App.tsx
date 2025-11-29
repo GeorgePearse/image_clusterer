@@ -182,12 +182,12 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (sample?.status === 'done') return;
 
-      if (e.altKey && e.key === 'ArrowLeft') {
+      if (e.shiftKey && e.key === 'ArrowLeft') {
           e.preventDefault();
           setViewIndex(v => Math.max(0, v - 1));
           return;
       }
-      if (e.altKey && e.key === 'ArrowRight') {
+      if (e.shiftKey && e.key === 'ArrowRight') {
           e.preventDefault();
           setViewIndex(v => Math.min(history.length, v + 1));
           return;
@@ -216,11 +216,9 @@ function App() {
         return;
       }
 
-      if (!isViewingHistory && hasSuggestion && document.activeElement !== inputRef.current) {
-          if (e.key.toLowerCase() === 'j') {
-              e.preventDefault(); 
-              handleLabel(sample!.suggestion!);
-          } else if (e.key.toLowerCase() === 'i') {
+      // 'I' key to focus input when not already focused
+      if (!isViewingHistory && document.activeElement !== inputRef.current) {
+          if (e.key.toLowerCase() === 'i') {
               inputRef.current?.focus();
           }
       }
@@ -466,7 +464,8 @@ function App() {
                                     <span className="text-muted-foreground text-xl font-light">?</span>
                                     <div className="h-6 w-px bg-border mx-2"></div>
                                     <div className="flex items-center gap-2">
-                                        <kbd className="hidden sm:inline-flex items-center h-6 px-2 text-[10px] font-medium text-muted-foreground bg-muted border rounded-md shadow-sm font-sans">J</kbd>
+                                        <kbd className="hidden sm:inline-flex items-center h-6 px-2 text-[10px] font-medium text-muted-foreground bg-muted border rounded-md shadow-sm font-sans">Shift</kbd>
+                                        <kbd className="hidden sm:inline-flex items-center h-6 px-2 text-[10px] font-medium text-muted-foreground bg-muted border rounded-md shadow-sm font-sans">Enter</kbd>
                                         <span className="text-[10px] text-muted-foreground font-medium uppercase">Accept</span>
                                     </div>
                                 </Card>
@@ -536,7 +535,7 @@ function App() {
                         <div className="mt-8 flex justify-center gap-8 opacity-40 hover:opacity-100 transition-opacity duration-500">
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
                                 <div className="flex gap-1">
-                                    <kbd className="bg-muted px-1.5 py-0.5 rounded border font-sans">Alt</kbd>
+                                    <kbd className="bg-muted px-1.5 py-0.5 rounded border font-sans">Shift</kbd>
                                     <kbd className="bg-muted px-1.5 py-0.5 rounded border font-sans">←</kbd>
                                 </div>
                                 <span>History</span>
