@@ -33,7 +33,7 @@ This creates a **flow state** where you're rapidly confirming correct suggestion
 | Random Sampling | ~200 | 50 hours |
 | QuickSort (Chain) | ~2000+ | 5 hours |
 
-<img width="1462" height="735" alt="image" src="https://github.com/user-attachments/assets/2dc08bb8-66d1-42f9-bf6c-522f6b690843" />
+<img width="1461" height="744" alt="image" src="https://github.com/user-attachments/assets/dab57321-d65f-43dc-886f-9ad5e4f078d1" />
 
 ## Features
 
