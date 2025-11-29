@@ -16,3 +16,4 @@ frontend/frontend.log
 frontend/frontend.pid
 tests/
 external/
+site/
