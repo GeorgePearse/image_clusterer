@@ -47,3 +47,16 @@ export async function fetchPoints(): Promise<Point[]> {
   if (!response.ok) throw new Error("Failed to fetch points");
   return response.json();
 }
+
+export interface StatusResponse {
+  ready: boolean;
+  stage: string;
+  progress: number;
+  message: string;
+}
+
+export async function fetchStatus(): Promise<StatusResponse> {
+  const response = await fetch(`${API_URL}/status`);
+  if (!response.ok) throw new Error("Failed to fetch status");
+  return response.json();
+}

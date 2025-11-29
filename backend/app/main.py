@@ -103,6 +103,14 @@ label_buffer = []
 cached_points = []
 last_labeled_id = None
 
+# Startup status tracking
+startup_status = {
+    "ready": False,
+    "stage": "starting",
+    "progress": 0,
+    "message": "Starting up..."
+}
+
 # --- Initialization ---
 try:
     dataset = MNISTWrapper(NUM_IMAGES)
@@ -186,12 +194,18 @@ async def run_modal_update(vote_buffer_snapshot, label_buffer_snapshot):
 
 
 def initial_index_update():
+    global startup_status
+    startup_status["stage"] = "embedding"
+    startup_status["message"] = "Generating embeddings..."
     logger.info("Performing initial index update...")
+
     model.eval()
     batch_size = 128
     points = []
+    total_batches = (NUM_IMAGES + batch_size - 1) // batch_size
+
     with torch.no_grad():
-        for i in range(0, NUM_IMAGES, batch_size):
+        for batch_idx, i in enumerate(range(0, NUM_IMAGES, batch_size)):
             end_idx = min(i + batch_size, NUM_IMAGES)
             tensors = torch.stack([dataset.get_tensor(j) for j in range(i, end_idx)])
             embeddings = model(tensors).cpu().numpy()
@@ -203,13 +217,24 @@ def initial_index_update():
                     )
                 )
 
+            # Update progress
+            progress = int((batch_idx + 1) / total_batches * 50)  # 0-50% for embedding
+            startup_status["progress"] = progress
+            startup_status["message"] = f"Generating embeddings... {end_idx}/{NUM_IMAGES}"
+            logger.info(f"Embedding progress: {end_idx}/{NUM_IMAGES} ({progress}%)")
+
+    startup_status["stage"] = "indexing"
+    startup_status["message"] = "Indexing vectors..."
     for i in range(0, len(points), 100):
         qdrant.upsert(collection_name=COLLECTION_NAME, points=points[i : i + 100])
     logger.info("Initial index update complete.")
 
 
 def update_projection():
-    global cached_points
+    global cached_points, startup_status
+    startup_status["stage"] = "projection"
+    startup_status["progress"] = 55
+    startup_status["message"] = "Computing 2D projection..."
     logger.info("Updating 2D projection with squeeze...")
 
     # Get all embeddings
@@ -218,19 +243,33 @@ def update_projection():
     all_embeddings = []
 
     batch_size = 128
+    total_batches = (NUM_IMAGES + batch_size - 1) // batch_size
+
     with torch.no_grad():
-        for i in range(0, NUM_IMAGES, batch_size):
+        for batch_idx, i in enumerate(range(0, NUM_IMAGES, batch_size)):
             end_idx = min(i + batch_size, NUM_IMAGES)
             # dataset.get_tensor uses device, so this is on GPU/MPS
             tensors = torch.stack([dataset.get_tensor(j) for j in range(i, end_idx)])
             embeddings = model(tensors).cpu().numpy()
             all_embeddings.append(embeddings)
 
+            # Update progress (55-70% for gathering embeddings)
+            progress = 55 + int((batch_idx + 1) / total_batches * 15)
+            startup_status["progress"] = progress
+            startup_status["message"] = f"Gathering embeddings for projection... {end_idx}/{NUM_IMAGES}"
+
     all_embeddings = np.vstack(all_embeddings)
 
     # Run Squeeze UMAP
+    startup_status["progress"] = 70
+    startup_status["message"] = "Running UMAP dimensionality reduction..."
+    logger.info("Running Squeeze UMAP...")
+
     reducer = squeeze.UMAP(n_components=2)
     embedding_2d = reducer.fit_transform(all_embeddings)
+
+    startup_status["progress"] = 95
+    startup_status["message"] = "Formatting points..."
 
     # Format points
     points = []
@@ -246,6 +285,10 @@ def update_projection():
         )
 
     cached_points = points
+    startup_status["progress"] = 100
+    startup_status["ready"] = True
+    startup_status["stage"] = "ready"
+    startup_status["message"] = "Ready!"
     logger.info(f"Projection complete. {len(points)} points.")
 
 
@@ -297,6 +340,12 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+@app.get("/status")
+def get_status():
+    """Return the current startup/initialization status."""
+    return startup_status
 
 
 @app.get("/points")

@@ -22,8 +22,9 @@ theme:
 nav:
   - Home: index.md
   - Architecture: architecture.md
-  - API: api.md
   - Usage: usage.md
+  - Simulation: simulation.md
+  - API: api.md
   - Roadmap: roadmap.md
 
 markdown_extensions:

@@ -2,8 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import './App.css';
 import { LogConsole } from './components/LogConsole';
 import { ScatterPlot } from './components/ScatterPlot';
-import { fetchNextSample, sendLabel, fetchPoints, type NextSampleResponse, type Point } from './api';
-import { Check, ChevronRight, Layout, Terminal, Sparkles, ArrowLeft, Search } from 'lucide-react';
+import { fetchNextSample, sendLabel, fetchPoints, fetchStatus, type NextSampleResponse, type Point, type StatusResponse } from './api';
+import { Check, ChevronRight, Layout, Terminal, Sparkles, ArrowLeft, Search, Loader2 } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +17,8 @@ const CLASSES = [
 function App() {
   const [sample, setSample] = useState<NextSampleResponse | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
-  
+  const [serverStatus, setServerStatus] = useState<StatusResponse | null>(null);
+
   const [history, setHistory] = useState<{image: any, label: string}[]>([]);
   const [viewIndex, setViewIndex] = useState(0);
 
@@ -72,10 +73,31 @@ function App() {
     }
   }, []);
 
+  // Poll server status until ready
   useEffect(() => {
-    loadNext();
-    loadPoints();
-  }, [loadNext]);
+    const pollStatus = async () => {
+      try {
+        const status = await fetchStatus();
+        setServerStatus(status);
+        if (!status.ready) {
+          // Poll every 500ms while not ready
+          setTimeout(pollStatus, 500);
+        }
+      } catch (e) {
+        // Server not responding yet, retry
+        setTimeout(pollStatus, 1000);
+      }
+    };
+    pollStatus();
+  }, []);
+
+  // Load data once server is ready
+  useEffect(() => {
+    if (serverStatus?.ready) {
+      loadNext();
+      loadPoints();
+    }
+  }, [serverStatus?.ready, loadNext]);
 
   useEffect(() => {
       if (isViewingHistory && historyLabel) {
@@ -196,9 +218,63 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [sample, inputValue, hasSuggestion, isViewingHistory, history.length, viewIndex, suggestions, selectedIndex]); 
 
+  // Show loading screen while server initializes
+  if (!serverStatus?.ready) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background text-foreground font-sans">
+        <div className="flex flex-col items-center gap-8 max-w-md px-8">
+          {/* Animated Logo/Spinner */}
+          <div className="relative">
+            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+              <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            </div>
+          </div>
+
+          {/* Status Text */}
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight">QuickSort</h1>
+            <p className="text-muted-foreground text-sm">
+              {serverStatus?.message || "Connecting to server..."}
+            </p>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full space-y-2">
+            <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                style={{ width: `${serverStatus?.progress || 0}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span className="capitalize">{serverStatus?.stage || "connecting"}</span>
+              <span>{serverStatus?.progress || 0}%</span>
+            </div>
+          </div>
+
+          {/* Stage indicator */}
+          <div className="flex gap-2">
+            {["embedding", "indexing", "projection", "ready"].map((stage, idx) => (
+              <div
+                key={stage}
+                className={cn(
+                  "w-2 h-2 rounded-full transition-colors duration-300",
+                  serverStatus?.stage === stage ? "bg-primary" :
+                  ["embedding", "indexing", "projection", "ready"].indexOf(serverStatus?.stage || "") > idx
+                    ? "bg-primary/50"
+                    : "bg-muted"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground font-sans selection:bg-primary/30">
-      
+
       {/* Sidebar / Scatter Plot */}
       <div 
         data-testid="sidebar"

@@ -9,3 +9,4 @@ scikit-learn
 python-multipart
 pytorch-metric-learning
 modal
+e2b-code-interpreter  # For remote simulation
