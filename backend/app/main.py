@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
 from PIL import Image, ImageDraw
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -18,14 +18,67 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
 import logging
 import ssl
+import asyncio
+from typing import List
 
 # Fix for SSL certificate verify failed
 ssl._create_default_https_context = ssl._create_unverified_context
 
+
+# --- Log Streaming Setup ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(message)
+            except:
+                pass
+
+
+manager = ConnectionManager()
+
+
+class WebSocketLogHandler(logging.Handler):
+    def emit(self, record):
+        log_entry = self.format(record)
+        # We need to run the async broadcast in the existing event loop if possible
+        # However, logging is synchronous.
+        # We can use a helper to schedule it or just print if loop is not ready.
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                asyncio.run_coroutine_threadsafe(manager.broadcast(log_entry), loop)
+        except RuntimeError:
+            pass  # Loop might not be running yet
+
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+# Add WebSocket handler
+ws_handler = WebSocketLogHandler()
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+ws_handler.setFormatter(formatter)
+logging.getLogger().addHandler(ws_handler)
+# Also add to uvicorn logger to capture server events
+logging.getLogger("uvicorn").addHandler(ws_handler)
+
+
 # --- Configuration ---
 EMBEDDING_DIM = 64
-NUM_IMAGES = 1000  # Use a subset of MNIST for speed if needed, or full
-BATCH_SIZE_FOR_UPDATE = 5
+NUM_IMAGES = 1000
+# Dream Mode: Update after every single interaction
+UPDATE_ON_EVERY_VOTE = True
 COLLECTION_NAME = "image_embeddings"
 QDRANT_PATH = "./qdrant_data"
 MODEL_PATH = "./model_checkpoint.pth"
@@ -33,6 +86,19 @@ MODEL_PATH = "./model_checkpoint.pth"
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Device configuration
+device = torch.device(
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
+logger.info(f"Using device: {device}")
+
+# --- State ---
+accumulated_loss = 0.0
 
 
 # --- Model ---
@@ -97,7 +163,8 @@ class MNISTWrapper:
             self.ids.append(str(uuid.uuid4()))
 
     def get_tensor(self, idx):
-        return self.transform(self.images[idx])
+        # Return on device
+        return self.transform(self.images[idx]).to(device)
 
     def get_base64(self, idx):
         img = self.images[idx]
@@ -125,12 +192,12 @@ except Exception as e:
     # Fallback or exit?
     raise e
 
-model = SimpleEmbeddingNet(EMBEDDING_DIM)
+model = SimpleEmbeddingNet(EMBEDDING_DIM).to(device)
 
 
 if os.path.exists(MODEL_PATH):
     try:
-        model.load_state_dict(torch.load(MODEL_PATH))
+        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
         logger.info("Loaded model checkpoint.")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
@@ -153,23 +220,32 @@ feedback_buffer = []
 
 def update_embeddings_index():
     logger.info("Updating Qdrant index...")
-    points = []
     model.eval()
-    with torch.no_grad():
-        for i in range(NUM_IMAGES):
-            tensor = dataset.get_tensor(i).unsqueeze(0)
-            embedding = model(tensor).squeeze().numpy()
-            points.append(
-                PointStruct(
-                    id=dataset.ids[i], vector=embedding.tolist(), payload={"index": i}
-                )
-            )
 
-    # Batch upsert
-    batch_size = 50
-    for i in range(0, len(points), batch_size):
+    # Process in batches
+    batch_size = 128
+    points = []
+
+    with torch.no_grad():
+        for i in range(0, NUM_IMAGES, batch_size):
+            end_idx = min(i + batch_size, NUM_IMAGES)
+            # Stack batch
+            tensors = torch.stack([dataset.get_tensor(j) for j in range(i, end_idx)])
+            embeddings = model(tensors).cpu().numpy()
+
+            for k, emb in enumerate(embeddings):
+                idx = i + k
+                points.append(
+                    PointStruct(
+                        id=dataset.ids[idx], vector=emb.tolist(), payload={"index": idx}
+                    )
+                )
+
+    # Batch upsert to Qdrant
+    upsert_batch_size = 100
+    for i in range(0, len(points), upsert_batch_size):
         qdrant.upsert(
-            collection_name=COLLECTION_NAME, points=points[i : i + batch_size]
+            collection_name=COLLECTION_NAME, points=points[i : i + upsert_batch_size]
         )
     logger.info("Index update complete.")
 
@@ -192,16 +268,37 @@ app.add_middleware(
 import os
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-frontend_dir = os.path.join(current_dir, "../../frontend")
+# Serve built frontend from 'frontend/dist'
+frontend_dir = os.path.join(current_dir, "../../frontend/dist")
 
-app.mount("/app", StaticFiles(directory=frontend_dir, html=True), name="frontend")
-# Redirect root to /app/index.html
-from fastapi.responses import RedirectResponse
+# We mount root / to serve index.html for SPA support, but FastAPI static files don't do SPA routing natively well.
+# Standard pattern: Mount /assets to /assets, and catch-all to serve index.html
+if os.path.exists(frontend_dir):
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(frontend_dir, "assets")),
+        name="assets",
+    )
 
 
 @app.get("/")
 async def read_root():
-    return RedirectResponse(url="/app/index.html")
+    if os.path.exists(os.path.join(frontend_dir, "index.html")):
+        return FileResponse(os.path.join(frontend_dir, "index.html"))
+    return {"message": "Frontend not built. Run 'npm run build' in frontend directory."}
+
+
+from fastapi.responses import FileResponse
+
+
+@app.websocket("/ws/logs")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # Keep connection open
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 
 class VoteRequest(BaseModel):
@@ -226,7 +323,7 @@ def get_pair():
         idx1 = random.randint(0, NUM_IMAGES - 1)
         tensor1 = dataset.get_tensor(idx1).unsqueeze(0)
         with torch.no_grad():
-            emb1 = model(tensor1).squeeze().numpy()
+            emb1 = model(tensor1).cpu().squeeze().numpy()
 
         # Search for similar items (Hard Positives or Hard Negatives)
         # Since we don't know the true labels here (in the real world), we rely on
@@ -258,12 +355,52 @@ def get_pair():
 
 @app.post("/vote")
 def vote(request: VoteRequest):
-    feedback_buffer.append(request)
-    logger.info(f"Vote received. Buffer size: {len(feedback_buffer)}")
+    global accumulated_loss
 
-    if len(feedback_buffer) >= BATCH_SIZE_FOR_UPDATE:
+    feedback_buffer.append(request)
+
+    # Calculate loss for this item to decide if we should update
+    idx1 = dataset.get_idx_by_id(request.id1)
+    idx2 = dataset.get_idx_by_id(request.id2)
+
+    if idx1 is not None and idx2 is not None:
+        model.eval()
+        with torch.no_grad():
+            t1 = dataset.get_tensor(idx1).unsqueeze(0)
+            t2 = dataset.get_tensor(idx2).unsqueeze(0)
+            emb1 = model(t1)
+            emb2 = model(t2)
+
+            # Loss calculation (same as training)
+            target = 1.0 if request.are_same else 0.0
+            margin = 1.0
+            dist = torch.nn.functional.pairwise_distance(emb1, emb2)
+
+            # Single item loss
+            # Loss = y * D^2 + (1-y) * max(margin - D, 0)^2
+            loss_val = target * (dist**2) + (1 - target) * (
+                torch.nn.functional.relu(margin - dist) ** 2
+            )
+
+            accumulated_loss += loss_val.item()
+            logger.info(
+                f"Vote received. Item Loss: {loss_val.item():.4f}, Accumulated Loss: {accumulated_loss:.4f}, Buffer: {len(feedback_buffer)}"
+            )
+
+    # Trigger update logic
+    should_update = False
+    if UPDATE_ON_EVERY_VOTE:
+        should_update = True
+    elif accumulated_loss >= 0.5:  # Hardcoded threshold fallback
+        should_update = True
+
+    if should_update:
+        logger.info(
+            f"Triggering update. Mode: {'Every Vote' if UPDATE_ON_EVERY_VOTE else 'Threshold'}"
+        )
         train_step()
         feedback_buffer.clear()
+        accumulated_loss = 0.0  # Reset
         # Save model
         torch.save(model.state_dict(), MODEL_PATH)
         # Update index
@@ -305,18 +442,9 @@ def train_step():
 
     embeddings_a = torch.cat(embeddings_a)
     embeddings_b = torch.cat(embeddings_b)
-    target = torch.tensor(labels, dtype=torch.float32)
+    target = torch.tensor(labels, dtype=torch.float32).to(device)
 
     # Manual Contrastive Loss
-    # D = Euclidean Distance
-    # Loss = y * D^2 + (1-y) * max(margin - D, 0)^2
-    # But we are using Cosine Similarity in Qdrant?
-    # Usually consistent to use same metric.
-    # If using Cosine, we should minimize (1 - cos) for positives, maximize (1 - cos) for negatives.
-    # Let's stick to Euclidean on Normalized Embeddings which is related to Cosine.
-    # ||u - v||^2 = 2 - 2(u . v) for normalized vectors.
-    # So minimizing Euclidean distance maximizes Cosine Similarity.
-
     margin = 1.0
     dist = torch.nn.functional.pairwise_distance(embeddings_a, embeddings_b)
 
