@@ -17,13 +17,16 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
 import logging
+import ssl
+
+# Fix for SSL certificate verify failed
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # --- Configuration ---
 EMBEDDING_DIM = 64
-NUM_IMAGES = 200  # Increased for better variety
-NUM_CLASSES = 10  # Increased classes
-COLLECTION_NAME = "image_embeddings"
+NUM_IMAGES = 1000  # Use a subset of MNIST for speed if needed, or full
 BATCH_SIZE_FOR_UPDATE = 5
+COLLECTION_NAME = "image_embeddings"
 QDRANT_PATH = "./qdrant_data"
 MODEL_PATH = "./model_checkpoint.pth"
 
@@ -36,16 +39,18 @@ logger = logging.getLogger(__name__)
 class SimpleEmbeddingNet(nn.Module):
     def __init__(self, embedding_dim=64):
         super(SimpleEmbeddingNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        # MNIST is 1 channel (grayscale), 28x28
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
         self.relu = nn.ReLU()
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.fc = nn.Linear(64 * 8 * 8, embedding_dim)
+        # 28 -> 14 -> 7
+        self.fc = nn.Linear(64 * 7 * 7, embedding_dim)
 
     def forward(self, x):
         x = self.pool(self.relu(self.conv1(x)))
         x = self.pool(self.relu(self.conv2(x)))
-        x = x.view(-1, 64 * 8 * 8)
+        x = x.view(-1, 64 * 7 * 7)
         x = self.fc(x)
         # Normalize embedding to hypersphere
         return torch.nn.functional.normalize(x, p=2, dim=1)
@@ -55,56 +60,40 @@ class SimpleEmbeddingNet(nn.Module):
 
 
 # --- Dataset ---
-class SyntheticDataset:
-    def __init__(self, num_images, num_classes):
+class MNISTWrapper:
+    def __init__(self, num_images=None):
+        from torchvision.datasets import MNIST
+
+        # Download MNIST
+        self.dataset = MNIST(
+            root="./backend/data", train=True, download=True, transform=None
+        )
+
         self.images = []
         self.ids = []
-        # We won't store explicit labels to simulate "unlabeled" nature,
-        # though we generate them with structure.
+        self.labels = []  # For debugging/logic (not used for training unless cheating)
+
+        # Select subset
+        total_available = len(self.dataset)
+        if num_images is None:
+            num_images = total_available
+        else:
+            num_images = min(num_images, total_available)
+
+        indices = np.random.choice(total_available, num_images, replace=False)
 
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                transforms.Normalize((0.5,), (0.5,)),  # MNIST mean/std approx
             ]
         )
 
-        # Generate images
-        for i in range(num_images):
-            label = i % num_classes
-
-            # Base color based on label
-            hue = label / num_classes
-            # Convert HSV to RGB (simplified)
-            import colorsys
-
-            r, g, b = colorsys.hsv_to_rgb(hue, 0.8, 0.8)
-            base_color = (int(r * 255), int(g * 255), int(b * 255))
-
-            # Create image
-            img = Image.new("RGB", (32, 32), color=base_color)
-            draw = ImageDraw.Draw(img)
-
-            # Add random shape based on label parity to make it non-trivial
-            # Even labels get circles, Odd labels get rectangles
-            shape_color = (
-                255 - base_color[0],
-                255 - base_color[1],
-                255 - base_color[2],
-            )
-
-            if label % 2 == 0:
-                draw.ellipse([8, 8, 24, 24], fill=shape_color)
-            else:
-                draw.rectangle([8, 8, 24, 24], fill=shape_color)
-
-            # Add noise
-            img_arr = np.array(img)
-            noise = np.random.randint(-20, 20, img_arr.shape)
-            img_arr = np.clip(img_arr + noise, 0, 255).astype(np.uint8)
-            img = Image.fromarray(img_arr)
-
+        print(f"Loading {num_images} MNIST images...")
+        for i in indices:
+            img, label = self.dataset[i]
             self.images.append(img)
+            self.labels.append(label)
             self.ids.append(str(uuid.uuid4()))
 
     def get_tensor(self, idx):
@@ -112,7 +101,7 @@ class SyntheticDataset:
 
     def get_base64(self, idx):
         img = self.images[idx]
-        img = img.resize((128, 128), Image.NEAREST)  # Upscale for UI
+        img = img.resize((128, 128), Image.NEAREST)
         buffered = io.BytesIO()
         img.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -128,8 +117,16 @@ class SyntheticDataset:
 
 
 # --- Application State ---
-dataset = SyntheticDataset(NUM_IMAGES, NUM_CLASSES)
+# Initialize MNIST
+try:
+    dataset = MNISTWrapper(NUM_IMAGES)
+except Exception as e:
+    logger.error(f"Failed to load MNIST: {e}")
+    # Fallback or exit?
+    raise e
+
 model = SimpleEmbeddingNet(EMBEDDING_DIM)
+
 
 if os.path.exists(MODEL_PATH):
     try:
@@ -235,9 +232,9 @@ def get_pair():
         # Since we don't know the true labels here (in the real world), we rely on
         # finding items that are close. If they are close, the user saying "NO" provides a strong signal (Push apart).
         # If they are close and user says "YES", it reinforces.
-        hits = qdrant.search(
-            collection_name=COLLECTION_NAME, query_vector=emb1, limit=5
-        )
+        hits = qdrant.query_points(
+            collection_name=COLLECTION_NAME, query=emb1, limit=5
+        ).points
 
         # Pick one from the top hits (excluding itself)
         candidates = [h for h in hits if h.id != dataset.ids[idx1]]

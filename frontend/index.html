@@ -1,8 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extreme Classification Sorter</title>
     <style>
         body {
@@ -13,59 +8,70 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
-            background-color: #f0f2f5;
-            color: #333;
+            background-color: #222; /* Dark background for full screen focus */
+            color: #eee;
+            overflow: hidden; /* Prevent scrolling */
         }
         h1 {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
             font-weight: 300;
+            font-size: 2.5em;
         }
         .container {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            text-align: center;
+            background: #333;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+            border-radius: 0;
         }
         .image-pair {
             display: flex;
-            gap: 20px;
-            margin-bottom: 30px;
+            gap: 40px;
+            margin-bottom: 40px;
             justify-content: center;
+            align-items: center;
         }
         .image-card {
             display: flex;
             flex-direction: column;
             align-items: center;
+            position: relative;
         }
         img {
-            width: 200px;
-            height: 200px;
+            width: 300px;
+            height: 300px;
             object-fit: cover;
-            border-radius: 8px;
-            border: 2px solid #eee;
-            image-rendering: pixelated; /* Since we are using small synthetic images */
+            border-radius: 12px;
+            border: 4px solid #444;
+            image-rendering: pixelated;
+            background-color: #000;
+            transition: border-color 0.2s;
         }
         .buttons {
             display: flex;
-            gap: 20px;
+            gap: 30px;
             justify-content: center;
+            margin-bottom: 20px;
         }
         button {
-            padding: 12px 30px;
-            font-size: 16px;
+            padding: 15px 40px;
+            font-size: 18px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
+            transition: all 0.2s;
             font-weight: 600;
+            opacity: 0.6; /* Default dimmed */
+            transform: scale(1);
         }
-        button:active {
-            transform: scale(0.98);
-        }
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        button.selected {
+            opacity: 1;
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255,255,255,0.3);
         }
         .btn-yes {
             background-color: #4CAF50;
@@ -76,22 +82,51 @@
             color: white;
         }
         .status {
-            margin-top: 15px;
-            color: #666;
+            position: absolute;
+            bottom: 20px;
+            color: #888;
             font-size: 0.9em;
-            height: 20px;
         }
-        .loading {
-            opacity: 0.5;
-            pointer-events: none;
+        .controls-hint {
+            margin-top: 20px;
+            color: #aaa;
+            font-size: 0.9em;
         }
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: none;
+            padding: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .nav-prev { left: 40px; }
+        .nav-next { right: 40px; }
+        
+        .loading img { opacity: 0.5; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>Are these similar?</h1>
+        <h1>Are they the same class?</h1>
         
+        <button class="nav-btn nav-prev" onclick="goBack()">&#10094;</button>
+        <button class="nav-btn nav-next" onclick="goForward()">&#10095;</button>
+
         <div class="image-pair" id="imagePair">
             <div class="image-card">
                 <img id="img1" src="" alt="Image 1">
@@ -102,8 +137,12 @@
         </div>
 
         <div class="buttons">
-            <button class="btn-yes" onclick="vote(true)">YES (Same)</button>
-            <button class="btn-no" onclick="vote(false)">NO (Different)</button>
+            <button id="btnYes" class="btn-yes" onclick="handleVote(true)">YES (J)</button>
+            <button id="btnNo" class="btn-no" onclick="handleVote(false)">NO (I)</button>
+        </div>
+        
+        <div class="controls-hint">
+            Use <b>J / I</b> to vote. Use <b>Left / Right</b> arrows to navigate history.
         </div>
 
         <div class="status" id="statusText">Loading...</div>
@@ -111,19 +150,28 @@
 
     <script>
         const API_URL = "";
-        let currentPair = null;
+        
+        // State
+        let history = []; // Array of { pair: Object, vote: boolean | null }
+        let currentIndex = -1;
+        let isLoading = false;
 
-        async function fetchPair() {
+        async function fetchNewPair() {
+            if (isLoading) return;
             setLoading(true);
             try {
                 const response = await fetch(`${API_URL}/pair`);
                 const data = await response.json();
-                currentPair = data;
                 
-                document.getElementById('img1').src = `data:image/png;base64,${data.image1.data}`;
-                document.getElementById('img2').src = `data:image/png;base64,${data.image2.data}`;
+                // Add to history
+                history.push({
+                    pair: data,
+                    vote: null
+                });
                 
-                document.getElementById('statusText').textContent = `Strategy: ${data.debug_strategy || 'unknown'}`;
+                // Move to new index
+                currentIndex = history.length - 1;
+                render();
             } catch (error) {
                 console.error("Error fetching pair:", error);
                 document.getElementById('statusText').textContent = "Error connecting to backend.";
@@ -132,40 +180,95 @@
             }
         }
 
-        async function vote(isSame) {
-            if (!currentPair) return;
+        function render() {
+            if (currentIndex < 0 || currentIndex >= history.length) return;
             
-            setLoading(true);
+            const item = history[currentIndex];
+            const data = item.pair;
+            
+            // Images
+            document.getElementById('img1').src = `data:image/png;base64,${data.image1.data}`;
+            document.getElementById('img2').src = `data:image/png;base64,${data.image2.data}`;
+            
+            // Status
+            document.getElementById('statusText').textContent = `Pair ${currentIndex + 1} / ${history.length} - Strategy: ${data.debug_strategy || 'unknown'}`;
+            
+            // Buttons state
+            const btnYes = document.getElementById('btnYes');
+            const btnNo = document.getElementById('btnNo');
+            
+            btnYes.classList.remove('selected');
+            btnNo.classList.remove('selected');
+            
+            if (item.vote === true) btnYes.classList.add('selected');
+            if (item.vote === false) btnNo.classList.add('selected');
+        }
+
+        async function handleVote(isSame) {
+            if (isLoading || currentIndex === -1) return;
+            
+            const item = history[currentIndex];
+            
+            // Optimistic update
+            const previousVote = item.vote;
+            item.vote = isSame;
+            render();
+            
+            // If vote changed or is new, send to backend
+            if (previousVote !== isSame) {
+                sendVote(item.pair, isSame);
+            }
+            
+            // Auto-advance if we are at the end
+            if (currentIndex === history.length - 1) {
+                await fetchNewPair();
+            } else {
+                // If editing history, move to next item
+                goForward();
+            }
+        }
+
+        async function sendVote(pair, isSame) {
             try {
                 const payload = {
-                    id1: currentPair.image1.id,
-                    id2: currentPair.image2.id,
+                    id1: pair.image1.id,
+                    id2: pair.image2.id,
                     are_same: isSame
                 };
 
-                const response = await fetch(`${API_URL}/vote`, {
+                await fetch(`${API_URL}/vote`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(payload)
                 });
-                
-                const result = await response.json();
-                console.log("Vote result:", result);
-                
-                // Fetch next pair immediately
-                await fetchPair();
             } catch (error) {
-                console.error("Error voting:", error);
-                document.getElementById('statusText').textContent = "Error sending vote.";
-                setLoading(false);
+                console.error("Error sending vote:", error);
+            }
+        }
+        
+        function goBack() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                render();
+            }
+        }
+        
+        function goForward() {
+            if (currentIndex < history.length - 1) {
+                currentIndex++;
+                render();
+            } else if (currentIndex === history.length - 1 && history[currentIndex].vote !== null) {
+                // If at end and already voted, fetch next
+                fetchNewPair();
             }
         }
 
-        function setLoading(isLoading) {
+        function setLoading(loading) {
+            isLoading = loading;
             const container = document.querySelector('.container');
-            if (isLoading) {
+            if (loading) {
                 container.classList.add('loading');
             } else {
                 container.classList.remove('loading');
@@ -173,16 +276,21 @@
         }
 
         // Initial load
-        fetchPair();
+        fetchNewPair();
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (document.querySelector('.container').classList.contains('loading')) return;
-            
-            if (e.key === 'y' || e.key === 'Y' || e.key === 'ArrowLeft') {
-                vote(true);
-            } else if (e.key === 'n' || e.key === 'N' || e.key === 'ArrowRight') {
-                vote(false);
+            // Vote keys
+            if (e.key === 'j' || e.key === 'J') {
+                handleVote(true);
+            } else if (e.key === 'i' || e.key === 'I') {
+                handleVote(false);
+            } 
+            // Navigation keys
+            else if (e.key === 'ArrowLeft') {
+                goBack();
+            } else if (e.key === 'ArrowRight') {
+                goForward();
             }
         });
     </script>

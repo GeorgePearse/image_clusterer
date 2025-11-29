@@ -5,3 +5,6 @@ __pycache__/
 server.log
 qdrant_data/
 model_checkpoint.pth
+backend/data/
+check_*.py
+download_mnist.py
