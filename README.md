@@ -4,6 +4,8 @@
 
 QuickSort is an extreme-speed image labeling tool that turns data annotation from a tedious chore into a flow state experience. Using active learning and the "Chain Reaction" strategy, you can achieve 10x faster labeling throughput compared to traditional random sampling.
 
+<img width="1461" height="744" alt="image" src="https://github.com/user-attachments/assets/dab57321-d65f-43dc-886f-9ad5e4f078d1" />
+
 ## The Problem
 
 Traditional image labeling is painfully slow:
@@ -33,7 +35,6 @@ This creates a **flow state** where you're rapidly confirming correct suggestion
 | Random Sampling | ~200 | 50 hours |
 | QuickSort (Chain) | ~2000+ | 5 hours |
 
-<img width="1461" height="744" alt="image" src="https://github.com/user-attachments/assets/dab57321-d65f-43dc-886f-9ad5e4f078d1" />
 
 ## Features
 
