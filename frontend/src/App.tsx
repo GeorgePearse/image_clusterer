@@ -2,8 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import './App.css';
 import { LogConsole } from './components/LogConsole';
 import { ScatterPlot } from './components/ScatterPlot';
-import { fetchNextSample, sendLabel, fetchPoints, fetchStatus, type NextSampleResponse, type Point, type StatusResponse } from './api';
-import { Check, ChevronRight, Layout, Terminal, Sparkles, ArrowLeft, Search, Loader2 } from 'lucide-react';
+import { fetchNextSample, sendLabel, fetchPoints, fetchStatus, fetchKnnConfig, setKnnConfig, type NextSampleResponse, type Point, type StatusResponse, type KnnConfig } from './api';
+import { Check, ChevronRight, Layout, Terminal, Sparkles, ArrowLeft, Search, Loader2, GripVertical, Settings2 } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,67 @@ const CLASSES = [
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"
 ];
 
+// Resize Handle Component
+function ResizeHandle({ onResize, side }: { onResize: (delta: number) => void; side: 'left' | 'right' }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    startXRef.current = e.clientX;
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - startXRef.current;
+      startXRef.current = e.clientX;
+      onResize(side === 'left' ? delta : -delta);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging, onResize, side]);
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className={cn(
+        "absolute top-0 bottom-0 w-2 z-30 cursor-col-resize group flex items-center justify-center",
+        side === 'left' ? 'right-0 translate-x-1/2' : 'left-0 -translate-x-1/2',
+        isDragging && "bg-primary/20"
+      )}
+    >
+      <div className={cn(
+        "w-1 h-12 rounded-full bg-border transition-all duration-200",
+        "group-hover:bg-primary/50 group-hover:h-20",
+        isDragging && "bg-primary h-24"
+      )}>
+        <GripVertical className={cn(
+          "w-4 h-4 text-muted-foreground/50 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity",
+          "group-hover:opacity-100",
+          isDragging && "opacity-100 text-primary"
+        )} />
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [sample, setSample] = useState<NextSampleResponse | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
@@ -23,13 +84,40 @@ function App() {
   const [viewIndex, setViewIndex] = useState(0);
 
   const [inputValue, setInputValue] = useState("");
-  
+
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  
+
   const [showScatter, setShowScatter] = useState(true);
   const [showLogs, setShowLogs] = useState(true);
-  
+
+  // Resizable panel widths
+  const [leftPanelWidth, setLeftPanelWidth] = useState(400);
+  const [rightPanelWidth, setRightPanelWidth] = useState(320);
+
+  // KNN config
+  const [knnConfig, setKnnConfigState] = useState<KnnConfig | null>(null);
+
+  const MIN_PANEL_WIDTH = 200;
+  const MAX_PANEL_WIDTH = 600;
+
+  const handleLeftResize = useCallback((delta: number) => {
+    setLeftPanelWidth(prev => Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, prev + delta)));
+  }, []);
+
+  const handleRightResize = useCallback((delta: number) => {
+    setRightPanelWidth(prev => Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, prev + delta)));
+  }, []);
+
+  const handleKnnChange = useCallback(async (newK: number) => {
+    try {
+      const config = await setKnnConfig(newK);
+      setKnnConfigState(config);
+    } catch (e) {
+      console.error("Failed to update KNN config:", e);
+    }
+  }, []);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isViewingHistory = viewIndex < history.length;
@@ -92,6 +180,8 @@ function App() {
     if (serverStatus?.ready) {
       loadNext();
       loadPoints();
+      // Load KNN config
+      fetchKnnConfig().then(setKnnConfigState).catch(console.error);
     }
   }, [serverStatus?.ready, loadNext]);
 
@@ -286,12 +376,13 @@ function App() {
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground font-sans selection:bg-primary/30">
 
       {/* Sidebar / Scatter Plot */}
-      <div 
+      <div
         data-testid="sidebar"
         className={cn(
-          "relative flex flex-col border-r bg-background/50 backdrop-blur-xl transition-all duration-500 ease-out z-20",
-          showScatter ? 'w-[400px]' : 'w-0 border-none'
+          "relative flex flex-col border-r bg-background/50 backdrop-blur-xl transition-all duration-300 ease-out z-20",
+          !showScatter && 'w-0 border-none overflow-hidden'
         )}
+        style={{ width: showScatter ? leftPanelWidth : 0 }}
       >
         <div className={cn("absolute top-6 left-6 z-10 transition-opacity duration-300", showScatter ? 'opacity-100' : 'opacity-0')}>
             <Badge variant="outline" className="gap-2 pl-1 pr-3 py-1 bg-background/50 backdrop-blur border-border/50 shadow-sm">
@@ -299,11 +390,11 @@ function App() {
                 <span className="text-[10px] font-semibold tracking-widest uppercase">Embedding Space</span>
             </Badge>
         </div>
-        
+
         <div className="flex-1 relative overflow-hidden">
            {showScatter && <ScatterPlot points={points} currentImageId={currentImageId} />}
         </div>
-        
+
         <div className={cn("p-6 border-t flex flex-col gap-4 transition-opacity duration-300", showScatter ? 'opacity-100' : 'opacity-0')}>
             <div className="flex justify-between items-center text-xs text-muted-foreground">
                 <span>Projection</span>
@@ -314,6 +405,9 @@ function App() {
                 <span className="font-mono text-foreground">{points.length}</span>
             </div>
         </div>
+
+        {/* Resize Handle for Left Panel */}
+        {showScatter && <ResizeHandle onResize={handleLeftResize} side="left" />}
       </div>
 
       {/* Main Content */}
@@ -351,10 +445,34 @@ function App() {
                 </div>
                 <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Labelled</span>
              </div>
-             
+
              <div className="h-4 w-px bg-border"></div>
-             
-             <Button 
+
+             {/* KNN K Slider */}
+             {knnConfig && (
+               <div className="flex items-center gap-3">
+                 <Settings2 size={14} className="text-muted-foreground" />
+                 <div className="flex flex-col gap-1">
+                   <div className="flex items-center gap-2">
+                     <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">K</span>
+                     <input
+                       type="range"
+                       min={knnConfig.min_k}
+                       max={knnConfig.max_k}
+                       value={knnConfig.k_neighbors}
+                       onChange={(e) => handleKnnChange(parseInt(e.target.value))}
+                       className="w-20 h-1 bg-secondary rounded-full appearance-none cursor-pointer accent-primary"
+                       title={`K neighbors: ${knnConfig.k_neighbors}`}
+                     />
+                     <span className="text-xs font-mono text-foreground w-6">{knnConfig.k_neighbors}</span>
+                   </div>
+                 </div>
+               </div>
+             )}
+
+             <div className="h-4 w-px bg-border"></div>
+
+             <Button
                 variant="ghost"
                 size="icon"
                 title="Toggle Logs"
@@ -557,7 +675,13 @@ function App() {
 
       {/* Logs Panel */}
       {showLogs && (
-         <div className="w-[320px] bg-card border-l relative flex-shrink-0 transition-all duration-300 z-20 flex flex-col">
+         <div
+           className="bg-card border-l relative flex-shrink-0 transition-all duration-300 z-20 flex flex-col"
+           style={{ width: rightPanelWidth }}
+         >
+             {/* Resize Handle for Right Panel */}
+             <ResizeHandle onResize={handleRightResize} side="right" />
+
              <div className="h-12 border-b flex items-center px-4 bg-card/50 backdrop-blur">
                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">System Logs</span>
              </div>

@@ -36,6 +36,13 @@ SELECTION_STRATEGY = os.environ.get(
     "SELECTION_STRATEGY", "cluster_chain"
 )  # cluster_chain, random, uncertainty, margin, diversity
 
+# KNN configuration for suggestions (configurable at runtime)
+knn_config = {
+    "k_neighbors": int(os.environ.get("KNN_K", "5")),  # Default to 5 for faster suggestions
+    "min_k": 1,
+    "max_k": 100,
+}
+
 # Fix SSL
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -432,6 +439,22 @@ def get_status():
     return startup_status
 
 
+@app.get("/config/knn")
+def get_knn_config():
+    """Return current KNN configuration."""
+    return knn_config
+
+
+@app.post("/config/knn")
+def set_knn_config(k: int):
+    """Set the K value for KNN suggestions."""
+    if k < knn_config["min_k"] or k > knn_config["max_k"]:
+        return {"error": f"K must be between {knn_config['min_k']} and {knn_config['max_k']}"}
+    knn_config["k_neighbors"] = k
+    logger.info(f"KNN K updated to {k}")
+    return knn_config
+
+
 @app.get("/points")
 def get_points(predictions: bool = False):
     """
@@ -485,9 +508,9 @@ def get_next_sample():
     with torch.no_grad():
         emb1 = model(tensor1).cpu().squeeze().numpy()
 
-    # 4. Query Qdrant for neighbors (limit 100 for better context)
+    # 4. Query Qdrant for neighbors (using configurable K)
     hits = qdrant.query_points(
-        collection_name=COLLECTION_NAME, query=emb1, limit=100
+        collection_name=COLLECTION_NAME, query=emb1, limit=knn_config["k_neighbors"]
     ).points
 
     # 5. Check neighbors for labels
@@ -509,6 +532,7 @@ def get_next_sample():
         "debug_info": {
             "neighbor_count": len(neighbor_labels),
             "neighbors": neighbor_labels,
+            "k_neighbors": knn_config["k_neighbors"],
         },
     }
 

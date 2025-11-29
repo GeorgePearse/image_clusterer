@@ -63,3 +63,23 @@ export async function fetchStatus(): Promise<StatusResponse> {
   if (!response.ok) throw new Error("Failed to fetch status");
   return response.json();
 }
+
+export interface KnnConfig {
+  k_neighbors: number;
+  min_k: number;
+  max_k: number;
+}
+
+export async function fetchKnnConfig(): Promise<KnnConfig> {
+  const response = await fetch(`${API_URL}/config/knn`);
+  if (!response.ok) throw new Error("Failed to fetch KNN config");
+  return response.json();
+}
+
+export async function setKnnConfig(k: number): Promise<KnnConfig> {
+  const response = await fetch(`${API_URL}/config/knn?k=${k}`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("Failed to set KNN config");
+  return response.json();
+}
