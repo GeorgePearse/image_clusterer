@@ -146,8 +146,20 @@ function App() {
         return;
       }
 
+      
+      // Merge backend suggestions with remaining classes
+      let newSuggestions: string[] = [];
+      if (data.suggestions && data.suggestions.length > 0) {
+        newSuggestions = [...data.suggestions];
+        // Add remaining classes that are not in suggestions
+        const remaining = CLASSES.filter(c => !newSuggestions.includes(c));
+        newSuggestions = [...newSuggestions, ...remaining];
+      } else {
+        newSuggestions = CLASSES;
+      }
+      
       setInputValue("");
-      setSuggestions(CLASSES);
+      setSuggestions(newSuggestions);
       setSelectedIndex(0);
       
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -194,12 +206,31 @@ function App() {
   }, [viewIndex, history, historyLabel, isViewingHistory]);
 
   useEffect(() => {
+    if (!inputValue) {
+        // When input is empty, show the sorted suggestions from the sample (if available)
+        // calculated in loadNext
+        if (sample && sample.suggestions && sample.suggestions.length > 0) {
+             let newSuggestions = [...sample.suggestions];
+             const remaining = CLASSES.filter(c => !newSuggestions.includes(c));
+             newSuggestions = [...newSuggestions, ...remaining];
+             setSuggestions(newSuggestions);
+        } else {
+             setSuggestions(CLASSES);
+        }
+        setSelectedIndex(0);
+        return;
+    }
+
     const filtered = CLASSES.filter(c => 
       c.toLowerCase().includes(inputValue.toLowerCase())
     );
+    // If filtering, we probably want to respect the original sort order? 
+    // Or maybe we still prioritize the "likely" ones?
+    // For now, let's just stick to the static list filter behavior when typing, 
+    // as "suggestions" are mostly for the "empty state" shortcuts.
     setSuggestions(filtered);
     setSelectedIndex(0); 
-  }, [inputValue]);
+  }, [inputValue, sample]);
 
   // Debounced refresh for predictions (avoid hammering backend)
   const predictionRefreshTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -265,6 +296,13 @@ function App() {
       if (suggestions[selectedIndex]) {
         setInputValue(suggestions[selectedIndex]);
       }
+    } else if (e.key >= '1' && e.key <= '9') {
+        // Quick select with number keys 1-9
+        const idx = parseInt(e.key) - 1;
+        if (idx < suggestions.length) {
+            e.preventDefault();
+            handleLabel(suggestions[idx]);
+        }
     }
   };
 
@@ -621,7 +659,7 @@ function App() {
                             </div>
 
                             {/* Dropdown */}
-                            {suggestions.length > 0 && inputValue.length > 0 && (
+                            {suggestions.length > 0 && (
                                 <div className="absolute top-full left-0 right-0 mt-2 bg-popover/95 backdrop-blur-xl border rounded-xl overflow-hidden shadow-2xl z-50 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200 p-1">
                                     <div className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 bg-popover/95 backdrop-blur">Suggestions</div>
                                     {suggestions.map((suggestion, idx) => (
@@ -637,7 +675,14 @@ function App() {
                                             }}
                                             onMouseEnter={() => setSelectedIndex(idx)}
                                         >
-                                            <span className="font-mono tracking-wide">{suggestion}</span>
+                                            <div className="flex items-center gap-2">
+                                                {idx < 9 && (
+                                                    <span className="font-mono text-xs text-muted-foreground/50 w-4 text-center">
+                                                        {idx + 1}
+                                                    </span>
+                                                )}
+                                                <span className="font-mono tracking-wide">{suggestion}</span>
+                                            </div>
                                             {idx === selectedIndex && (
                                                 <div className="flex items-center gap-1.5">
                                                     <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Select</span>

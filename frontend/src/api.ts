@@ -11,6 +11,7 @@ export interface ImageData {
 export interface NextSampleResponse {
   image?: ImageData;
   suggestion: string | null;
+  suggestions?: string[];
   debug_info?: any;
   status?: string;
   message?: string;

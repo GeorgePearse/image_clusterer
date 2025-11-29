@@ -101,3 +101,8 @@ This addresses a critical gap: connecting QuickSort to existing CV pipelines whe
 *   **Multi-User Support**: Websocket concurrency handling for team-based labelling.
 *   **Plugin System**: Allow custom embedding models (ResNet, ViT, CLIP) to be swapped via configuration.
 *   **Export Formats**: Native support for exporting to COCO, Parquet, and WebDataset formats.
+
+### ⌨️ Shortcuts & Usability
+
+*   **Number Selection**: Allow users to select the top 9 suggestions by pressing 1-9.
+*   **Quick Select**: Shift + Enter to select the top suggestion.

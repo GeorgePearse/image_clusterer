@@ -523,12 +523,17 @@ def get_next_sample():
 
     # 6. Suggestion
     suggestion = None
+    sorted_suggestions = []
     if neighbor_labels:
-        suggestion = Counter(neighbor_labels).most_common(1)[0][0]
+        counts = Counter(neighbor_labels)
+        suggestion = counts.most_common(1)[0][0]
+        # Get all labels sorted by frequency
+        sorted_suggestions = [label for label, _ in counts.most_common()]
 
     return {
         "image": {"id": candidate_id, "data": dataset.get_base64(idx1)},
         "suggestion": suggestion,
+        "suggestions": sorted_suggestions,
         "debug_info": {
             "neighbor_count": len(neighbor_labels),
             "neighbors": neighbor_labels,
