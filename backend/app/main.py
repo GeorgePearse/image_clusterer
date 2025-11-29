@@ -26,11 +26,15 @@ from .common import (
     logger,
 )
 from .modal_ops import train_and_reindex
+from .oracle import get_strategy
 
 # --- Configuration ---
 UPDATE_ON_EVERY_VOTE = False
 QDRANT_PATH = "./qdrant_data"
 MODEL_PATH = "./model_checkpoint.pth"
+SELECTION_STRATEGY = os.environ.get(
+    "SELECTION_STRATEGY", "cluster_chain"
+)  # cluster_chain, random, uncertainty, margin, diversity
 
 # Fix SSL
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -250,6 +254,10 @@ def update_projection():
 # Wait for initial_index_update to complete if running concurrently?
 # But here we run them sequentially on startup.
 
+# Initialize selection strategy
+selection_strategy = get_strategy(SELECTION_STRATEGY)
+logger.info(f"Using selection strategy: {SELECTION_STRATEGY}")
+
 # Run initial update on startup
 initial_index_update()
 update_projection()
@@ -300,34 +308,15 @@ def get_points():
 
 @app.get("/next")
 def get_next_sample():
-    # 1. Try to find an unlabelled neighbor of the last labeled point (Cluster Exploration)
-    candidate_id = None
-
-    if last_labeled_id:
-        idx_last = dataset.get_idx_by_id(last_labeled_id)
-        if idx_last is not None:
-            # Get embedding of last labeled
-            t_last = dataset.get_tensor(idx_last).unsqueeze(0)
-            with torch.no_grad():
-                emb_last = model(t_last).cpu().squeeze().numpy()
-
-            # Find neighbors
-            # Limit 100 to find diverse neighbors
-            hits = qdrant.query_points(
-                collection_name=COLLECTION_NAME, query=emb_last, limit=100
-            ).points
-
-            # Filter for unlabelled
-            unlabelled_hits = [h for h in hits if h.id not in dataset.user_labels]
-
-            if unlabelled_hits:
-                # Pick the closest one (first one) or a random close one to avoid getting stuck?
-                # Picking the closest one is best for "chaining"
-                candidate_id = unlabelled_hits[0].id
-
-    # 2. If no candidate (or no history), get random unlabelled
-    if candidate_id is None:
-        candidate_id = dataset.get_unlabelled_id()
+    # Use the configured selection strategy
+    candidate_id = selection_strategy.select_next(
+        model=model,
+        dataset=dataset,
+        qdrant_client=qdrant,
+        collection_name=COLLECTION_NAME,
+        user_labels=dataset.user_labels,
+        last_labeled_id=last_labeled_id,
+    )
 
     if candidate_id is None:
         return {"status": "done", "message": "All images labelled!"}
@@ -337,12 +326,6 @@ def get_next_sample():
         logger.error(
             f"Candidate ID {candidate_id} not found in dataset! This implies Qdrant/Dataset mismatch."
         )
-        # Fallback to random
-        candidate_id = dataset.get_unlabelled_id()
-        if candidate_id:
-            idx1 = dataset.get_idx_by_id(candidate_id)
-
-    if idx1 is None:
         return {"status": "error", "message": "Could not find valid image index."}
 
     # 3. Get embedding
