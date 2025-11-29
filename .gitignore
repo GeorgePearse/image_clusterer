@@ -8,3 +8,11 @@ model_checkpoint.pth
 backend/data/
 check_*.py
 download_mnist.py
+backend.log
+backend.pid
+frontend.log
+frontend.pid
+frontend/frontend.log
+frontend/frontend.pid
+tests/
+external/

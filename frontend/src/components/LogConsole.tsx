@@ -37,45 +37,35 @@ export const LogConsole: React.FC = () => {
 
   useEffect(() => {
     if (isOpen && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      // Use scrollTop instead of scrollIntoView to prevent layout jitter
+      const parent = logsEndRef.current.parentElement;
+      if (parent) {
+        parent.scrollTop = parent.scrollHeight;
+      }
     }
   }, [logs, isOpen]);
 
   return (
-    <div className={`bg-gray-900 text-green-400 font-mono text-xs transition-all duration-300 border-r border-gray-700 h-full flex flex-col flex-shrink-0 ${isOpen ? 'w-80' : 'w-12'}`}>
+    <div className="bg-[#111] text-green-400 font-mono text-xs h-full flex flex-col border-l border-[#333]">
       <div 
-        className="flex items-center justify-between p-3 h-12 bg-gray-800 cursor-pointer hover:bg-gray-700 border-b border-gray-700"
-        onClick={() => setIsOpen(!isOpen)}
-        title={isOpen ? "Collapse logs" : "Expand logs"}
+        className="flex items-center justify-between p-3 h-10 bg-[#1a1a1a] border-b border-[#333]"
       >
         <div className="flex items-center gap-2 overflow-hidden">
-          <Terminal size={16} className="flex-shrink-0" />
-          {isOpen && (
-            <>
-              <span className="font-semibold whitespace-nowrap">System Logs</span>
-              <span className="bg-gray-700 text-gray-300 px-2 py-0.5 rounded text-[10px] whitespace-nowrap">{logs.length}</span>
-            </>
-          )}
+          <Terminal size={14} className="flex-shrink-0 text-gray-400" />
+          <span className="font-semibold whitespace-nowrap text-gray-300">System Logs</span>
+          <span className="bg-[#333] text-gray-300 px-1.5 rounded text-[10px] min-w-[20px] text-center">{logs.length}</span>
         </div>
-        {isOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
       </div>
       
-      {isOpen && (
-        <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="p-3 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {logs.map((log, i) => (
-            <div key={i} className="mb-1 whitespace-pre-wrap font-mono opacity-90 border-b border-gray-800 pb-1 break-words">
+            <div key={i} className="mb-1.5 whitespace-pre-wrap font-mono opacity-80 border-b border-gray-800/50 pb-1 break-words leading-relaxed text-[11px]">
+              <span className="text-gray-500 mr-2">[{new Date().toLocaleTimeString()}]</span>
               {log}
             </div>
           ))}
           <div ref={logsEndRef} />
-        </div>
-      )}
-      
-      {!isOpen && (
-         <div className="flex flex-col items-center mt-4 gap-2 opacity-50">
-             <span className="text-[10px] writing-vertical-rl rotate-180 select-none">Logs ({logs.length})</span>
-         </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -8,28 +8,42 @@ export interface ImageData {
   data: string;
 }
 
-export interface ImagePair {
-  image1: ImageData;
-  image2: ImageData;
-  debug_strategy: string;
+export interface NextSampleResponse {
+  image?: ImageData;
+  suggestion: string | null;
+  debug_info?: any;
+  status?: string;
+  message?: string;
 }
 
-export interface VotePayload {
-  id1: string;
-  id2: string;
-  are_same: boolean;
+export interface LabelPayload {
+  image_id: string;
+  label: string;
 }
 
-export async function fetchPair(): Promise<ImagePair> {
-  const response = await fetch(`${API_URL}/pair`);
-  if (!response.ok) throw new Error("Failed to fetch pair");
+export interface Point {
+  id: string;
+  x: number;
+  y: number;
+  label?: string | null;
+}
+
+export async function fetchNextSample(): Promise<NextSampleResponse> {
+  const response = await fetch(`${API_URL}/next`);
+  if (!response.ok) throw new Error("Failed to fetch next sample");
   return response.json();
 }
 
-export async function sendVote(payload: VotePayload): Promise<void> {
-  await fetch(`${API_URL}/vote`, {
+export async function sendLabel(payload: LabelPayload): Promise<void> {
+  await fetch(`${API_URL}/label`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export async function fetchPoints(): Promise<Point[]> {
+  const response = await fetch(`${API_URL}/points`);
+  if (!response.ok) throw new Error("Failed to fetch points");
+  return response.json();
 }
