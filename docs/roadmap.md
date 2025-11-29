@@ -47,6 +47,55 @@ Instead of fine-tuning weights (which is slow and compute-heavy), we will update
 *   **Async VLM**: Use the VLM only for difficult cases or to periodically "clean up" and verify clusters in the background.
 *   **Small VLMs**: Experiment with local, quantized VLMs (e.g., LLaVA-Next, PaliGemma 3B) that can run at higher frame rates on consumer GPUs.
 
+### 📦 COCO Integration & Data Pipeline (Rust)
+
+A major workflow improvement will be seamless integration with existing annotation formats. We plan to build a high-performance **Rust package** for COCO file processing:
+
+#### Features
+1.  **COCO Import Pipeline**
+    *   Parse COCO JSON files (annotations or model predictions)
+    *   Extract image crops based on bounding boxes
+    *   Convert detections/segments into individual classification tasks
+    *   Feed directly into QuickSort's labeling workflow
+
+2.  **Detection → Classification Bridge**
+    *   Use existing object detector (YOLO, RCNN, etc.) to generate proposals
+    *   Import COCO predictions as unlabeled crop candidates
+    *   Apply QuickSort's active learning to verify/correct class labels
+    *   Export cleaned annotations back to COCO format
+
+3.  **Performance Benefits of Rust**
+    *   **Fast parsing**: Handle massive COCO files (100K+ images) in seconds
+    *   **Zero-copy deserialization**: Efficiently process large JSON without Python overhead
+    *   **Parallel crop extraction**: Multi-threaded image processing
+    *   **Memory efficiency**: Stream processing for datasets larger than RAM
+
+#### Example Workflow
+```bash
+# Import COCO predictions and start labeling
+quicksort-coco import \
+    --predictions model_output.json \
+    --images /path/to/coco/images \
+    --output-dir crops/ \
+    --min-confidence 0.3
+
+# QuickSort processes the crops
+./start.sh --dataset crops/
+
+# Export corrected labels back to COCO
+quicksort-coco export \
+    --labels labels.json \
+    --output cleaned_annotations.json
+```
+
+#### Integration Points
+*   Python bindings via PyO3 for seamless backend integration
+*   CLI tool for standalone pipeline usage
+*   Support for COCO variants (Detectron2, MMDetection formats)
+*   Optional GPU acceleration for crop extraction (image-rs + wgpu)
+
+This addresses a critical gap: connecting QuickSort to existing CV pipelines where COCO is the standard format.
+
 ### 🛠 Technical Improvements
 
 *   **Multi-User Support**: Websocket concurrency handling for team-based labelling.
