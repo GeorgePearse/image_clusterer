@@ -53,3 +53,9 @@ This means the system **learns in real-time**. If you introduce a new class "Ast
 
 *   **Embedding Space (Scatter Plot)**: A live view of the model's brain. As you label, you see clusters forming and shifting. This provides global context and trust in the model's learning process.
 *   **Confidence Glow**: When the model is confident in a suggestion, the UI glows with the suggestion's color, subtly reinforcing the "happy path" of just pressing `Shift + Enter`.
+
+## Future Experiments: Human Latency & Batching
+
+We hypothesize that user response time improves significantly when labeling batches of the same class (reducing cognitive context switching).
+*   **Experiment**: Measure labeling speed (time-to-click) when presenting a sorted stream of similar images vs. random images.
+*   **Goal**: Quantify the "Flow State" bonus. If confirmed, the selection strategy should heavily penalize switching classes, even if a "random" sample might offer slightly higher information gain for the model purely mathematically. The trade-off between *model efficiency* (fewest samples) and *human efficiency* (fastest labeling) is key to QuickSort's design.
