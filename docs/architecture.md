@@ -1,50 +1,317 @@
 # Architecture
 
-## System Design
+## Overview
 
-QuickSort moves beyond simple random sampling. It uses a **Neighborhood-Based Active Learning** strategy to maximize labelling throughput.
+QuickSort is a human-in-the-loop image labelling system that uses active learning to maximize labelling efficiency. The system fine-tunes image embeddings in real-time based on user feedback, using a "chain reaction" strategy to rapidly label clusters of similar images.
 
-### Components
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              QUICKSORT ARCHITECTURE                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌─────────────────┐         HTTP/WS          ┌──────────────────────┐    │
+│   │                 │◄────────────────────────►│                      │    │
+│   │    Frontend     │     /next, /label        │      Backend         │    │
+│   │   (React/Vite)  │     /points, /ws/logs    │     (FastAPI)        │    │
+│   │                 │                          │                      │    │
+│   └────────┬────────┘                          └──────────┬───────────┘    │
+│            │                                              │                │
+│   ┌────────▼────────┐                          ┌──────────▼───────────┐    │
+│   │  regl-scatterplot│                         │   PyTorch Model      │    │
+│   │  (WebGL 2D viz)  │                         │  (SimpleEmbeddingNet)│    │
+│   └─────────────────┘                          └──────────┬───────────┘    │
+│                                                           │                │
+│                                                ┌──────────▼───────────┐    │
+│                                                │      Qdrant          │    │
+│                                                │  (Vector Database)   │    │
+│                                                └──────────┬───────────┘    │
+│                                                           │                │
+│                                                ┌──────────▼───────────┐    │
+│                                                │     Squeeze UMAP     │    │
+│                                                │  (2D Projection)     │    │
+│                                                └──────────────────────┘    │
+│                                                                             │
+│                         ┌──────────────────────┐                           │
+│                         │   Modal (Optional)   │                           │
+│                         │  (GPU Training Jobs) │                           │
+│                         └──────────────────────┘                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-1.  **Frontend (React + Vite)**:
-    *   **Blended Interface**: Single input field that handles both verification (Y/N) and correction.
-    *   **regl-scatterplot**: WebGL-powered 2D visualization of the embedding space.
-    *   **WebSocket Logs**: Real-time streaming of backend events.
+## System Components
 
-2.  **Backend (FastAPI)**:
-    *   **PyTorch Model**: A simple CNN (ResNet-like) that maps images to a 64-dimensional vector space.
-    *   **Squeeze**: A custom dimensionality reduction library (UMAP) for generating the 2D projection.
-    *   **Modal Ops**: Background training and re-indexing tasks (optional integration).
+### Frontend (React + Vite + TypeScript)
 
-3.  **Vector Database (Qdrant)**:
-    *   Stores image embeddings.
-    *   Performs efficient K-Nearest Neighbor (KNN) searches to find context for the current image.
+**Location:** `frontend/src/`
 
-### The "Chain Reaction" Loop
+The frontend provides an optimized labelling interface designed for speed and minimal cognitive load.
 
-The core innovation of QuickSort is the **Chain Reaction** loop:
+| File | Purpose |
+|------|---------|
+| `App.tsx` | Main application component with labelling workflow |
+| `api.ts` | API client for backend communication |
+| `components/ScatterPlot.tsx` | WebGL-powered embedding visualization |
+| `components/LogConsole.tsx` | Real-time backend log streaming |
+| `components/ui/*` | Shadcn/ui component library |
 
-1.  **User Labels Image A**: "Cat".
-2.  **System Search**: Backend queries Qdrant for the nearest **unlabelled** neighbor of Image A. Let's call it Image B.
-3.  **Context Retrieval**: Backend checks the neighbors of Image B. Since Image A is close (and now labelled "Cat"), "Cat" becomes the strong suggestion for Image B.
-4.  **Presentation**: Frontend shows Image B with "Cat" as the suggestion.
-5.  **User Confirmation**: User presses `Shift + Enter` (instant confirmation).
-6.  **Repeat**: The system finds the neighbor of Image B, continuing the chain until the cluster is fully labelled.
+**Key Features:**
 
-### Data Flow
+- **Blended Input Interface**: Single input field handles both label confirmation and correction
+- **Keyboard-First Design**: `Shift+Enter` for instant confirmation, `J` to accept suggestions
+- **History Navigation**: `Alt+←/→` to review and correct previous labels
+- **Real-time Visualization**: WebGL scatter plot shows embedding space with color-coded labels
+- **WebSocket Logs**: Live streaming of backend training events
 
-1.  **Initialization**:
-    *   Images are embedded via the PyTorch model.
-    *   Embeddings are stored in Qdrant.
-    *   `Squeeze` computes the initial 2D projection.
+**UI Components (Shadcn/ui):**
+```
+Button, Input, Badge, Card - Modern, accessible components
+Tailwind CSS - Zinc-based dark theme
+Lucide Icons - Consistent iconography
+```
 
-2.  **Fetching Next Sample (`/next`)**:
-    *   System checks `last_labeled_id`.
-    *   Finds nearest unlabelled neighbor (Cluster Exploration) or falls back to random/uncertainty sampling.
-    *   Retrieves label distribution of neighbors to generate a suggestion.
+### Backend (FastAPI + PyTorch)
 
-3.  **Labelling (`/label`)**:
-    *   User submits label.
-    *   Label is stored in memory/DB.
-    *   Local 2D points are updated optimistically.
-    *   (Optional) Model retrains in background on the new labeled pair.
+**Location:** `backend/app/`
+
+The backend manages the ML pipeline, vector search, and serves the API.
+
+| File | Purpose |
+|------|---------|
+| `main.py` | FastAPI application, endpoints, and orchestration |
+| `common.py` | Shared models, dataset wrapper, configuration |
+| `modal_ops.py` | Optional GPU training via Modal |
+
+**Core Classes:**
+
+```python
+# Neural Network (common.py:44)
+class SimpleEmbeddingNet(nn.Module):
+    """CNN that maps 28x28 grayscale images to 64-dim normalized embeddings"""
+    - Conv layers: 1→32→64 channels
+    - Output: L2-normalized 64-dimensional vector
+    - Optional classification head for supervised learning
+
+# Dataset Wrapper (common.py:78)
+class MNISTWrapper:
+    """Manages image data, IDs, and user labels"""
+    - Loads MNIST subset (configurable, default 1000 images)
+    - Assigns UUID to each image
+    - Tracks user_labels: Dict[id, label]
+    - Provides base64 encoding for frontend display
+```
+
+**API Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Serves frontend (production) |
+| `/next` | GET | Returns next image to label with AI suggestion |
+| `/label` | POST | Submits user label, triggers training |
+| `/vote` | POST | Submits same/different feedback |
+| `/points` | GET | Returns 2D projection for visualization |
+| `/ws/logs` | WS | WebSocket for real-time log streaming |
+
+### Vector Database (Qdrant)
+
+**Configuration:** Local file-based storage at `./qdrant_data`
+
+Qdrant stores 64-dimensional image embeddings and enables fast similarity search.
+
+```python
+# Collection setup (main.py:122-127)
+qdrant.recreate_collection(
+    collection_name="image_embeddings",
+    vectors_config=VectorParams(
+        size=64,           # EMBEDDING_DIM
+        distance=Distance.COSINE
+    )
+)
+```
+
+**Usage:**
+- KNN search to find neighbors of current image
+- Neighbor label distribution generates suggestions
+- Re-indexed when model updates
+
+### Dimensionality Reduction (Squeeze)
+
+**Location:** `external/squeeze/`
+
+Squeeze is a high-performance UMAP implementation used to project 64D embeddings to 2D for visualization.
+
+```python
+# Projection (main.py:228-229)
+reducer = squeeze.UMAP(n_components=2)
+embedding_2d = reducer.fit_transform(all_embeddings)
+```
+
+### Optional: Modal GPU Training
+
+**Location:** `backend/app/modal_ops.py`
+
+For faster training, the system can offload GPU computation to Modal's serverless infrastructure.
+
+```python
+@app.function(image=image, gpu="any", timeout=600)
+def train_and_reindex(model_state, feedback_buffer, label_buffer, ...):
+    # Contrastive loss from same/different votes
+    # Classification loss from labels
+    # Returns updated model state and re-computed embeddings
+```
+
+## The "Chain Reaction" Loop
+
+The core innovation enabling rapid labelling:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     CHAIN REACTION WORKFLOW                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. User labels Image A as "Cat"                               │
+│                    │                                            │
+│                    ▼                                            │
+│  2. System queries Qdrant for nearest UNLABELLED               │
+│     neighbor of Image A → finds Image B                        │
+│                    │                                            │
+│                    ▼                                            │
+│  3. System checks neighbors of Image B                         │
+│     → Image A is close and labeled "Cat"                       │
+│     → Suggests "Cat" for Image B                               │
+│                    │                                            │
+│                    ▼                                            │
+│  4. Frontend shows Image B with suggestion                     │
+│     "Is it Cat? [J] Accept"                                    │
+│                    │                                            │
+│                    ▼                                            │
+│  5. User presses J or Shift+Enter                              │
+│     → Instant confirmation                                      │
+│                    │                                            │
+│                    ▼                                            │
+│  6. Repeat: Find neighbor of B, continue chain                 │
+│     until cluster is fully labelled                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation (main.py:301-378):**
+
+1. Check `last_labeled_id` for chain continuation
+2. Query Qdrant for 100 nearest neighbors
+3. Filter for unlabelled images
+4. Select closest unlabelled as next candidate
+5. Check candidate's neighbors for label distribution
+6. Return most common neighbor label as suggestion
+
+## Data Flow
+
+### Initialization Sequence
+
+```
+Application Start
+       │
+       ├──► Load MNIST dataset (1000 images)
+       │    └──► Assign UUIDs to each image
+       │
+       ├──► Initialize/Load PyTorch model
+       │    └──► SimpleEmbeddingNet (64-dim output)
+       │
+       ├──► Create Qdrant collection
+       │    └──► Recreate on each start (UUIDs are ephemeral)
+       │
+       ├──► Initial index update
+       │    └──► Embed all images, store in Qdrant
+       │
+       └──► Compute initial 2D projection
+            └──► Squeeze UMAP: 64D → 2D
+```
+
+### Labelling Request Flow
+
+```
+GET /next
+    │
+    ├──► Check last_labeled_id
+    │    │
+    │    ├──► If exists: Query Qdrant for neighbors
+    │    │    └──► Find first unlabelled neighbor (chain)
+    │    │
+    │    └──► If not: Get random unlabelled image
+    │
+    ├──► Embed selected image
+    │
+    ├──► Query neighbors for label distribution
+    │
+    └──► Return {image, suggestion, debug_info}
+
+
+POST /label
+    │
+    ├──► Store label in dataset.user_labels
+    │
+    ├──► Update last_labeled_id (for chaining)
+    │
+    ├──► Add to label_buffer
+    │
+    └──► Check training trigger
+         └──► If accumulated_loss >= 0.5: Trigger Modal update
+```
+
+### Training Pipeline
+
+```
+Training Trigger
+       │
+       ├──► Snapshot feedback_buffer and label_buffer
+       │
+       ├──► Clear buffers, reset accumulated_loss
+       │
+       └──► Async Modal job
+            │
+            ├──► Contrastive loss (same/different pairs)
+            │    loss = target * dist² + (1-target) * relu(margin-dist)²
+            │
+            ├──► Classification loss (cross-entropy)
+            │
+            ├──► Backprop and update model
+            │
+            ├──► Re-embed all images
+            │
+            └──► Return to main thread
+                 │
+                 ├──► Update local model state
+                 ├──► Save checkpoint
+                 └──► Upsert embeddings to Qdrant
+```
+
+## Configuration
+
+Key constants defined in `backend/app/common.py`:
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `EMBEDDING_DIM` | 64 | Dimensionality of image embeddings |
+| `NUM_IMAGES` | 1000 | Number of MNIST images to load |
+| `NUM_CLASSES` | 10 | MNIST digit classes (0-9) |
+| `COLLECTION_NAME` | "image_embeddings" | Qdrant collection name |
+
+Runtime configuration in `backend/app/main.py`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `UPDATE_ON_EVERY_VOTE` | False | Train after every interaction |
+| `QDRANT_PATH` | "./qdrant_data" | Vector DB storage location |
+| `MODEL_PATH` | "./model_checkpoint.pth" | Model checkpoint file |
+
+## Technology Stack Summary
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Frontend | React 18 + Vite | Fast development, optimized builds |
+| UI Components | Shadcn/ui + Tailwind | Modern, accessible design system |
+| Visualization | regl-scatterplot | WebGL 2D scatter plot |
+| API | FastAPI | Async Python web framework |
+| ML Framework | PyTorch | Neural network training |
+| Vector DB | Qdrant | Similarity search |
+| Dim. Reduction | Squeeze (UMAP) | 2D projection |
+| GPU Compute | Modal (optional) | Serverless GPU training |
