@@ -358,3 +358,32 @@ PYTHONHASHSEED=42 python -m backend.simulate --strategy cluster_chain
 - Read [Architecture](architecture.md) to understand the system design
 - See [Usage](usage.md) for manual labeling workflow
 - Check [Roadmap](roadmap.md) for future simulation features
+
+## Optimization via Reinforcement Learning
+
+The simulation framework can be extended to support **Reinforcement Learning (RL)** to find optimal selection strategies that balance *information gain* with *human efficiency*.
+
+### Problem Formulation (MDP)
+
+We can model the active learning process as a Markov Decision Process:
+
+*   **State ($S_t$)**:
+    *   Current embedding space state (clusters, density).
+    *   **Context**: The class of the previously labeled image.
+*   **Action ($A_t$)**:
+    *   Select the next image to label from the pool.
+*   **Cost ($C_t$) - Human Latency**:
+    *   Modeled based on "Flow State":
+        *   **Low Cost** (~0.5s): If $Label(A_t) == Label(A_{t-1})$ (Same class, fast confirmation).
+        *   **High Cost** (~2.5s): If $Label(A_t) \neq Label(A_{t-1})$ (Context switch, cognitive load).
+*   **Reward ($R_t$)**:
+    *   Rate of model improvement per unit of time.
+    $$R_t = \frac{\Delta \text{Accuracy}}{\text{Cost}_t}$$
+
+### Goal
+
+The goal is to learn a policy $\pi(S_t)$ that maximizes the total reward (accuracy) within a fixed time budget $T$, rather than a fixed budget of labels $N$.
+
+$$ \max_\pi \sum_{t=0}^{T} R_t $$
+
+This encourages the system to choose "easier" sequences (clusters) that allow for rapid labeling, even if each individual sample provides slightly less theoretical information gain than a "hard" active learning sample (uncertainty sampling), provided the speedup outweighs the data inefficiency.
