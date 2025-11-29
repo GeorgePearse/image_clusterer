@@ -37,6 +37,7 @@ const CURRENT_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]; //
 export function ScatterPlot({ points, currentImageId, onPointClick: _onPointClick }: ScatterPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scatterplotRef = useRef<any>(null);
+  const prevPointCountRef = useRef<number>(0);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -129,13 +130,37 @@ export function ScatterPlot({ points, currentImageId, onPointClick: _onPointClic
         return 4; // Unlabeled, no prediction
     });
 
+    // Only use transitions when point count is the same (regl-scatterplot requirement)
+    const canTransition = prevPointCountRef.current === points.length && prevPointCountRef.current > 0;
+    const isFirstDraw = prevPointCountRef.current === 0;
+    prevPointCountRef.current = points.length;
+
     scatterplotRef.current.draw(data, {
         pointColor: colors,
         pointSize: sizes,
-        transition: true,
-        transitionDuration: 600,
+        transition: canTransition,
+        transitionDuration: canTransition ? 600 : 0,
         transitionEasing: 'cubicOut'
     });
+
+    // Auto-fit view on first draw by calculating bounds
+    if (isFirstDraw && data.length > 0) {
+      const xs = data.map(d => d[0]);
+      const ys = data.map(d => d[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const padX = (maxX - minX) * 0.1;
+      const padY = (maxY - minY) * 0.1;
+
+      scatterplotRef.current.zoomToArea({
+        x: minX - padX,
+        y: minY - padY,
+        width: (maxX - minX) + padX * 2,
+        height: (maxY - minY) + padY * 2
+      }, { transition: false });
+    }
     
   }, [points, currentImageId]);
 
