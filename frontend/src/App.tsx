@@ -23,7 +23,6 @@ function App() {
   const [viewIndex, setViewIndex] = useState(0);
 
   const [inputValue, setInputValue] = useState("");
-  // const [loading, setLoading] = useState(false);
   
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -51,7 +50,6 @@ function App() {
   };
 
   const loadNext = useCallback(async () => {
-    setLoading(true);
     try {
       const data = await fetchNextSample();
       setSample(data);
@@ -68,8 +66,6 @@ function App() {
 
     } catch (e) {
       console.error(e);
-    } finally {
-      // setLoading(false);
     }
   }, []);
 
