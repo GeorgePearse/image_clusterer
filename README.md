@@ -123,10 +123,10 @@ Extend the system by adding your own strategy in [`backend/app/oracle.py`](backe
 ```
 
 **Key Components:**
-- **PyTorch CNN**: Maps images to 64D normalized embeddings
-- **Qdrant**: Vector database for KNN search (cosine similarity)
-- **Squeeze**: Fast UMAP implementation for 2D projection
-- **Modal**: Serverless GPU training (optional)
+- **[PyTorch](https://github.com/pytorch/pytorch) CNN**: Maps images to 64D normalized embeddings
+- **[Qdrant](https://github.com/qdrant/qdrant)**: Vector database for KNN search (cosine similarity)
+- **[Squeeze](https://github.com/GeorgePearse/squeeze)**: Fast UMAP implementation for 2D projection
+- **[Modal](https://github.com/modal-labs/modal-client)**: Serverless GPU training (optional)
 
 See [`docs/architecture.md`](docs/architecture.md) for details.
 
