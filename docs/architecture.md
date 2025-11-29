@@ -40,7 +40,7 @@ QuickSort is a human-in-the-loop image labelling system that uses active learnin
 
 ## System Components
 
-### Frontend (React + Vite + TypeScript)
+### Frontend ([React](https://github.com/facebook/react) + [Vite](https://github.com/vitejs/vite) + TypeScript)
 
 **Location:** `frontend/src/`
 
@@ -62,14 +62,14 @@ The frontend provides an optimized labelling interface designed for speed and mi
 - **Real-time Visualization**: WebGL scatter plot shows embedding space with color-coded labels
 - **WebSocket Logs**: Live streaming of backend training events
 
-**UI Components (Shadcn/ui):**
+**UI Components ([shadcn/ui](https://github.com/shadcn-ui/ui)):**
 ```
 Button, Input, Badge, Card - Modern, accessible components
 Tailwind CSS - Zinc-based dark theme
 Lucide Icons - Consistent iconography
 ```
 
-### Backend (FastAPI + PyTorch)
+### Backend ([FastAPI](https://github.com/tiangolo/fastapi) + [PyTorch](https://github.com/pytorch/pytorch))
 
 **Location:** `backend/app/`
 
@@ -111,11 +111,11 @@ class MNISTWrapper:
 | `/points` | GET | Returns 2D projection for visualization |
 | `/ws/logs` | WS | WebSocket for real-time log streaming |
 
-### Vector Database (Qdrant)
+### Vector Database ([Qdrant](https://github.com/qdrant/qdrant))
 
 **Configuration:** Local file-based storage at `./qdrant_data`
 
-Qdrant stores 64-dimensional image embeddings and enables fast similarity search.
+[Qdrant](https://github.com/qdrant/qdrant-client) stores 64-dimensional image embeddings and enables fast similarity search.
 
 ```python
 # Collection setup (main.py:122-127)
@@ -133,11 +133,11 @@ qdrant.recreate_collection(
 - Neighbor label distribution generates suggestions
 - Re-indexed when model updates
 
-### Dimensionality Reduction (Squeeze)
+### Dimensionality Reduction ([Squeeze](https://github.com/wseaton/squeeze))
 
 **Location:** `external/squeeze/`
 
-Squeeze is a high-performance UMAP implementation used to project 64D embeddings to 2D for visualization.
+[Squeeze](https://github.com/wseaton/squeeze) is a high-performance UMAP implementation used to project 64D embeddings to 2D for visualization.
 
 ```python
 # Projection (main.py:228-229)
@@ -145,11 +145,11 @@ reducer = squeeze.UMAP(n_components=2)
 embedding_2d = reducer.fit_transform(all_embeddings)
 ```
 
-### Optional: Modal GPU Training
+### Optional: [Modal](https://github.com/modal-labs/modal-client) GPU Training
 
 **Location:** `backend/app/modal_ops.py`
 
-For faster training, the system can offload GPU computation to Modal's serverless infrastructure.
+For faster training, the system can offload GPU computation to [Modal's](https://modal.com/) serverless infrastructure.
 
 ```python
 @app.function(image=image, gpu="any", timeout=600)
@@ -307,11 +307,11 @@ Runtime configuration in `backend/app/main.py`:
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| Frontend | React 18 + Vite | Fast development, optimized builds |
-| UI Components | Shadcn/ui + Tailwind | Modern, accessible design system |
-| Visualization | regl-scatterplot | WebGL 2D scatter plot |
-| API | FastAPI | Async Python web framework |
-| ML Framework | PyTorch | Neural network training |
-| Vector DB | Qdrant | Similarity search |
-| Dim. Reduction | Squeeze (UMAP) | 2D projection |
-| GPU Compute | Modal (optional) | Serverless GPU training |
+| Frontend | [React 18](https://github.com/facebook/react) + [Vite](https://github.com/vitejs/vite) | Fast development, optimized builds |
+| UI Components | [shadcn/ui](https://github.com/shadcn-ui/ui) + [Tailwind](https://github.com/tailwindlabs/tailwindcss) | Modern, accessible design system |
+| Visualization | [regl-scatterplot](https://github.com/flekschas/regl-scatterplot) | WebGL 2D scatter plot |
+| API | [FastAPI](https://github.com/tiangolo/fastapi) | Async Python web framework |
+| ML Framework | [PyTorch](https://github.com/pytorch/pytorch) | Neural network training |
+| Vector DB | [Qdrant](https://github.com/qdrant/qdrant) | Similarity search |
+| Dim. Reduction | [Squeeze](https://github.com/wseaton/squeeze) (UMAP) | 2D projection |
+| GPU Compute | [Modal](https://github.com/modal-labs/modal-client) (optional) | Serverless GPU training |
