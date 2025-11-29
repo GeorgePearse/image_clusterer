@@ -84,3 +84,22 @@ export async function setKnnConfig(k: number): Promise<KnnConfig> {
   if (!response.ok) throw new Error("Failed to set KNN config");
   return response.json();
 }
+
+export interface StrategyConfig {
+  strategy: string;
+  available: string[];
+}
+
+export async function fetchStrategyConfig(): Promise<StrategyConfig> {
+  const response = await fetch(`${API_URL}/config/strategy`);
+  if (!response.ok) throw new Error("Failed to fetch strategy config");
+  return response.json();
+}
+
+export async function setStrategyConfig(strategy: string): Promise<void> {
+  const response = await fetch(`${API_URL}/config/strategy?strategy=${strategy}`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("Failed to set strategy config");
+  return response.json();
+}

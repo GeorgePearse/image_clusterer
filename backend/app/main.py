@@ -11,7 +11,12 @@ from qdrant_client.models import VectorParams, Distance, PointStruct
 import logging
 import ssl
 import asyncio
+import time
+import threading
+import uuid
 from typing import List
+from pydantic import BaseModel
+from .simulation import SimulationRunner, STRATEGIES as SIM_STRATEGIES
 
 # Import from common and modal_ops
 from .common import (
@@ -455,6 +460,31 @@ def set_knn_config(k: int):
     return knn_config
 
 
+@app.get("/config/strategy")
+def get_current_strategy():
+    """Return current active selection strategy."""
+    return {"strategy": SELECTION_STRATEGY, "available": list(SIM_STRATEGIES.keys())}
+
+
+@app.post("/config/strategy")
+def set_current_strategy(strategy: str):
+    """Update the active selection strategy."""
+    global SELECTION_STRATEGY, selection_strategy
+    
+    # Handle direct string body or query param
+    # If the user sends a raw string in body, FastAPI might expect JSON. 
+    # Let's support query param for simplicity or expect a JSON if needed.
+    # Actually, for a simple string, query param is easiest.
+    
+    if strategy not in SIM_STRATEGIES:
+         return {"error": f"Invalid strategy. Available: {list(SIM_STRATEGIES.keys())}"}
+    
+    SELECTION_STRATEGY = strategy
+    selection_strategy = get_strategy(strategy)
+    logger.info(f"Updated selection strategy to: {strategy}")
+    return {"status": "ok", "strategy": strategy}
+
+
 @app.get("/points")
 def get_points(predictions: bool = False):
     """
@@ -616,6 +646,73 @@ async def label(request: LabelRequest):
     check_trigger_update()
 
     return {"status": "ok", "buffer_size": len(label_buffer), "training": is_training}
+
+
+
+# --- Simulation Endpoints ---
+sim_results = {}  # {sim_id: {status: running|done|error, results: {...}}}
+
+class SimulationRequest(BaseModel):
+    strategy: str
+    num_images: int = 100
+    max_labels: int = 100
+
+@app.post("/simulation/run")
+def run_simulation(request: SimulationRequest):
+    """Start a simulation in the background."""
+    sim_id = str(uuid.uuid4())
+    sim_results[sim_id] = {
+        "status": "running", 
+        "request": request.dict(),
+        "start_time": time.time()
+    }
+
+    def _run_sim():
+        try:
+            logger.info(f"Starting simulation {sim_id} with strategy {request.strategy}")
+            runner = SimulationRunner(
+                strategy_name=request.strategy,
+                num_images=request.num_images,
+                use_qdrant_memory=True
+            )
+            # Run simulation
+            metrics = runner.run(
+                max_labels=request.max_labels,
+                verbose=True,
+                log_every=10
+            )
+            sim_results[sim_id]["status"] = "done"
+            sim_results[sim_id]["results"] = metrics
+            sim_results[sim_id]["duration"] = time.time() - sim_results[sim_id]["start_time"]
+            logger.info(f"Simulation {sim_id} finished successfully")
+        except Exception as e:
+            logger.error(f"Simulation {sim_id} failed: {e}")
+            sim_results[sim_id]["status"] = "error"
+            sim_results[sim_id]["error"] = str(e)
+
+    # Run in a separate thread to not block API
+    thread = threading.Thread(target=_run_sim)
+    thread.daemon = True
+    thread.start()
+
+    return {"sim_id": sim_id, "status": "started"}
+
+@app.get("/simulation/results")
+def get_simulation_results():
+    """Get all simulation results."""
+    # Convert dict to list sorted by start time
+    results_list = []
+    for sid, data in sim_results.items():
+        results_list.append({"id": sid, **data})
+    
+    # Sort by start time descending
+    results_list.sort(key=lambda x: x["start_time"], reverse=True)
+    return results_list
+
+@app.get("/simulation/strategies")
+def get_simulation_strategies():
+    """Get available strategies."""
+    return list(SIM_STRATEGIES.keys())
 
 
 if __name__ == "__main__":

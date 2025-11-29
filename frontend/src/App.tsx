@@ -2,8 +2,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import './App.css';
 import { LogConsole } from './components/LogConsole';
 import { ScatterPlot } from './components/ScatterPlot';
-import { fetchNextSample, sendLabel, fetchPoints, fetchStatus, fetchKnnConfig, setKnnConfig, type NextSampleResponse, type Point, type StatusResponse, type KnnConfig } from './api';
-import { Check, ChevronRight, Layout, Terminal, Sparkles, ArrowLeft, Search, Loader2, GripVertical, Settings2 } from 'lucide-react';
+import { fetchNextSample, sendLabel, fetchPoints, fetchStatus, fetchKnnConfig, setKnnConfig, fetchStrategyConfig, setStrategyConfig, type NextSampleResponse, type Point, type StatusResponse, type KnnConfig, type StrategyConfig } from './api';
+import { SimulationView } from './components/SimulationView';
+import { Check, ChevronRight, Layout, Terminal, Sparkles, ArrowLeft, Search, Loader2, GripVertical, Settings2, BarChart2, Zap } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -90,6 +91,7 @@ function App() {
 
   const [showScatter, setShowScatter] = useState(true);
   const [showLogs, setShowLogs] = useState(true);
+  const [showSimulation, setShowSimulation] = useState(false);
 
   // Resizable panel widths
   const [leftPanelWidth, setLeftPanelWidth] = useState(400);
@@ -97,6 +99,9 @@ function App() {
 
   // KNN config
   const [knnConfig, setKnnConfigState] = useState<KnnConfig | null>(null);
+  
+  // Strategy config
+  const [strategyConfig, setStrategyConfigState] = useState<StrategyConfig | null>(null);
 
   const MIN_PANEL_WIDTH = 200;
   const MAX_PANEL_WIDTH = 600;
@@ -115,6 +120,17 @@ function App() {
       setKnnConfigState(config);
     } catch (e) {
       console.error("Failed to update KNN config:", e);
+    }
+  }, []);
+
+  const handleStrategyChange = useCallback(async (newStrategy: string) => {
+    try {
+      await setStrategyConfig(newStrategy);
+      setStrategyConfigState(prev => prev ? { ...prev, strategy: newStrategy } : null);
+      // Reload sample to reflect new strategy
+      loadNext();
+    } catch (e) {
+      console.error("Failed to update strategy:", e);
     }
   }, []);
 
@@ -194,6 +210,8 @@ function App() {
       loadPoints();
       // Load KNN config
       fetchKnnConfig().then(setKnnConfigState).catch(console.error);
+      // Load Strategy config
+      fetchStrategyConfig().then(setStrategyConfigState).catch(console.error);
     }
   }, [serverStatus?.ready, loadNext]);
 
@@ -486,6 +504,29 @@ function App() {
 
              <div className="h-4 w-px bg-border"></div>
 
+             {/* Strategy Selector */}
+             {strategyConfig && (
+               <div className="flex items-center gap-3">
+                 <Zap size={14} className="text-muted-foreground" />
+                 <div className="flex flex-col gap-1">
+                   <div className="flex items-center gap-2">
+                     <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Strategy</span>
+                     <select
+                       value={strategyConfig.strategy}
+                       onChange={(e) => handleStrategyChange(e.target.value)}
+                       className="h-6 text-xs bg-secondary/50 rounded-md border-none focus:ring-1 focus:ring-primary/50 cursor-pointer outline-none px-2 py-0"
+                     >
+                       {strategyConfig.available.map(s => (
+                         <option key={s} value={s}>{s}</option>
+                       ))}
+                     </select>
+                   </div>
+                 </div>
+               </div>
+             )}
+
+             <div className="h-4 w-px bg-border"></div>
+
              {/* KNN K Slider */}
              {knnConfig && (
                <div className="flex items-center gap-3">
@@ -513,6 +554,16 @@ function App() {
              <Button
                 variant="ghost"
                 size="icon"
+                title="Simulation View"
+                onClick={() => setShowSimulation(!showSimulation)}
+                className={cn("text-muted-foreground hover:text-foreground", showSimulation && "bg-accent text-accent-foreground")}
+             >
+                <BarChart2 size={18} />
+             </Button>
+
+             <Button
+                variant="ghost"
+                size="icon"
                 title="Toggle Logs"
                 onClick={() => setShowLogs(!showLogs)}
                 className={cn("text-muted-foreground hover:text-foreground", showLogs && "bg-accent text-accent-foreground")}
@@ -525,11 +576,17 @@ function App() {
         {/* Central Stage */}
         <div className="flex-1 relative flex flex-col items-center justify-center p-8 overflow-hidden">
             
-            {/* Background Glow */}
-            <div className={cn(
-                "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 blur-[120px] rounded-full pointer-events-none transition-all duration-1000",
-                hasSuggestion ? 'bg-purple-500/5' : ''
-            )}></div>
+            {showSimulation ? (
+                <div className="absolute inset-0 z-50 bg-background">
+                    <SimulationView />
+                </div>
+            ) : (
+                <>
+                {/* Background Glow */}
+                <div className={cn(
+                    "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 blur-[120px] rounded-full pointer-events-none transition-all duration-1000",
+                    hasSuggestion ? 'bg-purple-500/5' : ''
+                )}></div>
 
             {/* Navigation Buttons (Floating) */}
             <Button
@@ -714,6 +771,8 @@ function App() {
 
                     </div>
                 </div>
+            )}
+            </>
             )}
         </div>
       </div>

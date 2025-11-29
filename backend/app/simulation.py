@@ -27,23 +27,25 @@ from typing import Dict, List, Tuple
 import numpy as np
 import torch
 from collections import Counter, defaultdict
+from sklearn.neighbors import KNeighborsClassifier
 
 # Add project root to path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.join(current_dir, "..")
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# project_root = os.path.join(current_dir, "..")
+# if project_root not in sys.path:
+#     sys.path.insert(0, project_root)
 
-from backend.app.common import (
+from .common import (
     SimpleEmbeddingNet,
     MNISTWrapper,
     EMBEDDING_DIM,
     NUM_CLASSES,
     device,
 )
-from backend.app.oracle import Oracle, get_strategy, STRATEGIES
+from .oracle import Oracle, get_strategy, STRATEGIES
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, PointStruct
+from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.http.models import QueryRequest
 
 
 class SimulationRunner:
@@ -95,7 +97,7 @@ class SimulationRunner:
 
         # Index all images
         print("Computing embeddings and indexing...")
-        self._index_all_images()
+        self.all_embeddings = self._index_all_images()
 
         # Oracle and Strategy
         print("Initializing oracle and strategy...")
@@ -106,18 +108,33 @@ class SimulationRunner:
         self.metrics = {
             "strategy": strategy_name,
             "num_images": num_images,
-            "labels_history": [],  # [(step, num_labeled, accuracy, cluster_purity)]
+            "labels_history": [],  # [(step, num_labeled, accuracy, cluster_purity, cumulative_time)]
             "selection_times": [],
             "labeling_times": [],
             "total_time": 0.0,
+            "simulated_human_time": 0.0,
         }
 
         print("Initialization complete!\n")
 
+    def _get_human_labeling_cost(self, current_label: str, previous_label: str | None) -> float:
+        """
+        Simulate human labeling time (seconds).
+        - Flow State (Same Class): 0.6s (Fast confirmation)
+        - Context Switch (Diff Class): 2.5s (Cognitive load + typing)
+        """
+        if previous_label is None:
+            return 2.5 # First label is always "slow"
+        
+        if current_label == previous_label:
+            return 0.6
+        return 2.5
+
     def _index_all_images(self):
-        """Compute embeddings and index in Qdrant."""
+        """Compute embeddings and index in Qdrant. Returns embedding matrix."""
         batch_size = 128
         points = []
+        all_embeddings = []
 
         with torch.no_grad():
             for i in range(0, self.num_images, batch_size):
@@ -126,6 +143,7 @@ class SimulationRunner:
                     [self.dataset.get_tensor(j) for j in range(i, end_idx)]
                 )
                 embeddings = self.model(tensors).cpu().numpy()
+                all_embeddings.append(embeddings)
 
                 for k, emb in enumerate(embeddings):
                     idx = i + k
@@ -133,7 +151,7 @@ class SimulationRunner:
                         PointStruct(
                             id=self.dataset.ids[idx],
                             vector=emb.tolist(),
-                            payload={"index": idx},
+                            payload={"index": idx, "is_labeled": False},
                         )
                     )
 
@@ -142,6 +160,68 @@ class SimulationRunner:
             self.qdrant.upsert(
                 collection_name=self.collection_name, points=points[i : i + 100]
             )
+            
+        return np.vstack(all_embeddings)
+
+    def _calculate_knn_accuracy(self, k: int = 5) -> float:
+        """
+        Evaluate KNN classifier on all data using Qdrant batch search.
+        Returns accuracy (0.0 - 1.0).
+        """
+        if len(self.dataset.user_labels) < k:
+            return 0.0
+
+        # Construct batch queries for all images
+        requests = []
+        # Filter: only consider neighbors that have been labeled
+        search_filter = Filter(
+            must=[
+                FieldCondition(key="is_labeled", match=MatchValue(value=True))
+            ]
+        )
+
+        for vector in self.all_embeddings:
+            requests.append(
+                QueryRequest(
+                    query=vector.tolist(),
+                    filter=search_filter,
+                    limit=k,
+                    with_payload=True
+                )
+            )
+        
+        # Execute batch search
+        batch_results = self.qdrant.query_batch_points(
+            collection_name=self.collection_name,
+            requests=requests
+        )
+
+        # Calculate accuracy
+        correct = 0
+        total = len(self.dataset.labels) # Ground truth length
+
+        for i, query_response in enumerate(batch_results):
+            # query_response is a QueryResponse object with a 'points' attribute
+            if not query_response.points:
+                continue
+            
+            votes = []
+            for hit in query_response.points:
+                if hit.payload:
+                    label = hit.payload.get("label")
+                    if label is not None:
+                        votes.append(label)
+            
+            if not votes:
+                continue
+                
+            predicted_label = Counter(votes).most_common(1)[0][0]
+            true_label = str(self.dataset.labels[i])
+            
+            if predicted_label == true_label:
+                correct += 1
+                
+        return correct / total if total > 0 else 0.0
 
     def _calculate_metrics(self) -> Dict:
         """Calculate current state metrics."""
@@ -149,6 +229,7 @@ class SimulationRunner:
             return {
                 "num_labeled": 0,
                 "accuracy": 0.0,
+                "knn_accuracy": 0.0,
                 "cluster_purity": 0.0,
                 "label_distribution": {},
             }
@@ -164,6 +245,9 @@ class SimulationRunner:
                 correct += 1
 
         accuracy = correct / total if total > 0 else 0.0
+        
+        # KNN Model Accuracy (K=5)
+        knn_accuracy = self._calculate_knn_accuracy(k=5)
 
         # Cluster purity: For each true class, what % of its labeled examples are correct?
         class_correct = defaultdict(int)
@@ -187,6 +271,7 @@ class SimulationRunner:
         return {
             "num_labeled": total,
             "accuracy": accuracy,
+            "knn_accuracy": knn_accuracy,
             "cluster_purity": cluster_purity,
             "label_distribution": dict(label_dist),
         }
@@ -237,6 +322,14 @@ class SimulationRunner:
             labeling_start = time.time()
             label = self.oracle.label(img_id)
             self.dataset.user_labels[img_id] = label
+            
+            # Update Payload for filtering
+            self.qdrant.set_payload(
+                collection_name=self.collection_name,
+                payload={"label": label, "is_labeled": True},
+                points=[img_id]
+            )
+            
             last_labeled_id = img_id
             labeling_time = time.time() - labeling_start
             self.metrics["labeling_times"].append(labeling_time)
