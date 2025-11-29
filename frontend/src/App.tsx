@@ -40,9 +40,9 @@ function App() {
 
   const totalLabelled = points.filter(p => p.label).length;
 
-  const loadPoints = async () => {
+  const loadPoints = async (includePredictions: boolean = true) => {
       try {
-          const pts = await fetchPoints();
+          const pts = await fetchPoints(includePredictions);
           setPoints(pts);
       } catch (e) {
           console.error("Failed to load points:", e);
@@ -111,6 +111,18 @@ function App() {
     setSelectedIndex(0); 
   }, [inputValue]);
 
+  // Debounced refresh for predictions (avoid hammering backend)
+  const predictionRefreshTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const schedulePredictionRefresh = () => {
+    if (predictionRefreshTimeout.current) {
+      clearTimeout(predictionRefreshTimeout.current);
+    }
+    predictionRefreshTimeout.current = setTimeout(() => {
+      loadPoints(true);
+    }, 1000); // Refresh predictions 1s after last label
+  };
+
   const handleLabel = async (label: string) => {
     if (!currentItem?.image) return;
 
@@ -118,13 +130,17 @@ function App() {
       image_id: currentItem.image.id,
       label: label
     });
-    
+
+    // Immediately update local state for the labeled point
     setPoints(prev => prev.map(p => {
         if (p.id === currentItem.image.id) {
-            return { ...p, label: label };
+            return { ...p, label: label, predicted_label: label, confidence: 1.0 };
         }
         return p;
     }));
+
+    // Schedule a debounced refresh to update all predictions
+    schedulePredictionRefresh();
 
     if (isViewingHistory) {
         const newHistory = [...history];

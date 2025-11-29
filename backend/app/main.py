@@ -230,6 +230,90 @@ def initial_index_update():
     logger.info("Initial index update complete.")
 
 
+def compute_predictions_for_points(points_list):
+    """
+    For each unlabeled point, predict its label based on k nearest labeled neighbors.
+    Returns points with added 'predicted_label' and 'confidence' fields.
+    """
+    if not dataset.user_labels:
+        # No labels yet, return points as-is
+        return points_list
+
+    # Get all embeddings for KNN
+    labeled_ids = set(dataset.user_labels.keys())
+
+    updated_points = []
+    for point in points_list:
+        pid = point["id"]
+
+        if point.get("label"):
+            # Already labeled - full confidence
+            updated_points.append({
+                **point,
+                "predicted_label": point["label"],
+                "confidence": 1.0
+            })
+        else:
+            # Unlabeled - predict from neighbors
+            idx = dataset.get_idx_by_id(pid)
+            if idx is None:
+                updated_points.append(point)
+                continue
+
+            # Get embedding and query Qdrant
+            tensor = dataset.get_tensor(idx).unsqueeze(0)
+            with torch.no_grad():
+                emb = model(tensor).cpu().squeeze().numpy()
+
+            # Find nearest neighbors
+            hits = qdrant.query_points(
+                collection_name=COLLECTION_NAME,
+                query=emb,
+                limit=20  # Look at more neighbors for better confidence estimate
+            ).points
+
+            # Count labeled neighbors
+            neighbor_labels = []
+            neighbor_scores = []
+            for h in hits:
+                if h.id == pid:
+                    continue
+                if h.id in labeled_ids:
+                    neighbor_labels.append(dataset.user_labels[h.id])
+                    neighbor_scores.append(h.score)  # Cosine similarity
+
+            if neighbor_labels:
+                # Compute weighted vote (closer neighbors have more weight)
+                label_weights = {}
+                for label, score in zip(neighbor_labels, neighbor_scores):
+                    label_weights[label] = label_weights.get(label, 0) + score
+
+                # Get prediction and confidence
+                predicted_label = max(label_weights, key=label_weights.get)
+                total_weight = sum(label_weights.values())
+                confidence = label_weights[predicted_label] / total_weight if total_weight > 0 else 0
+
+                # Scale confidence: also consider how many labeled neighbors we found
+                # More labeled neighbors = more confident
+                coverage = min(len(neighbor_labels) / 5, 1.0)  # Cap at 5 neighbors
+                confidence = confidence * coverage
+
+                updated_points.append({
+                    **point,
+                    "predicted_label": predicted_label,
+                    "confidence": round(confidence, 3)
+                })
+            else:
+                # No labeled neighbors nearby
+                updated_points.append({
+                    **point,
+                    "predicted_label": None,
+                    "confidence": 0
+                })
+
+    return updated_points
+
+
 def update_projection():
     global cached_points, startup_status
     startup_status["stage"] = "projection"
@@ -349,10 +433,29 @@ def get_status():
 
 
 @app.get("/points")
-def get_points():
+def get_points(predictions: bool = False):
+    """
+    Return 2D projection points.
+
+    Args:
+        predictions: If True, include predicted labels and confidence for unlabeled points.
+                    This is slower but enables confidence-based visualization.
+    """
     if not cached_points:
         update_projection()
-    return cached_points
+
+    # Update labels from current user_labels (cached_points may have stale labels)
+    points_with_labels = []
+    for p in cached_points:
+        points_with_labels.append({
+            **p,
+            "label": dataset.user_labels.get(p["id"])
+        })
+
+    if predictions:
+        return compute_predictions_for_points(points_with_labels)
+
+    return points_with_labels
 
 
 @app.get("/next")

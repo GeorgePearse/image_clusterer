@@ -6,6 +6,8 @@ interface Point {
   x: number;
   y: number;
   label?: string | null;
+  predicted_label?: string | null;
+  confidence?: number;
 }
 
 interface ScatterPlotProps {
@@ -94,19 +96,37 @@ export function ScatterPlot({ points, currentImageId, onPointClick: _onPointClic
     
     const colors = sortedPoints.map(p => {
       if (p.id === currentImageId) return CURRENT_COLOR;
-      
+
+      // User-labeled points: full color
       if (p.label && LABEL_COLORS[p.label.toLowerCase()]) {
         return LABEL_COLORS[p.label.toLowerCase()];
       } else if (p.label) {
-        return [0.4, 0.8, 0.4, 1.0]; 
+        return [0.4, 0.8, 0.4, 1.0];
       }
-      
+
+      // Predicted labels: color with confidence-based alpha
+      if (p.predicted_label && LABEL_COLORS[p.predicted_label.toLowerCase()]) {
+        const baseColor = LABEL_COLORS[p.predicted_label.toLowerCase()];
+        const confidence = p.confidence ?? 0;
+        // Alpha ranges from 0.15 (low confidence) to 0.7 (high confidence)
+        const alpha = 0.15 + confidence * 0.55;
+        return [baseColor[0], baseColor[1], baseColor[2], alpha] as [number, number, number, number];
+      }
+
       return UNLABELLED_COLOR;
     });
 
     const sizes = sortedPoints.map(p => {
         if (p.id === currentImageId) return 25; // Massive highlight
-        return p.label ? 8 : 5; // Labelled points larger
+        if (p.label) return 8; // User-labeled points are larger
+
+        // Predicted points: size scales with confidence
+        if (p.predicted_label && p.confidence) {
+          // Size ranges from 4 (low confidence) to 7 (high confidence)
+          return 4 + p.confidence * 3;
+        }
+
+        return 4; // Unlabeled, no prediction
     });
 
     scatterplotRef.current.draw(data, {

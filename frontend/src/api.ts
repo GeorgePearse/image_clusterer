@@ -26,6 +26,8 @@ export interface Point {
   x: number;
   y: number;
   label?: string | null;
+  predicted_label?: string | null;
+  confidence?: number;
 }
 
 export async function fetchNextSample(): Promise<NextSampleResponse> {
@@ -42,8 +44,9 @@ export async function sendLabel(payload: LabelPayload): Promise<void> {
   });
 }
 
-export async function fetchPoints(): Promise<Point[]> {
-  const response = await fetch(`${API_URL}/points`);
+export async function fetchPoints(includePredictions: boolean = false): Promise<Point[]> {
+  const url = includePredictions ? `${API_URL}/points?predictions=true` : `${API_URL}/points`;
+  const response = await fetch(url);
   if (!response.ok) throw new Error("Failed to fetch points");
   return response.json();
 }
