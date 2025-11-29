@@ -14,15 +14,18 @@ QuickSort is designed to minimize friction. Traditional labelling tools are clic
 
 ## Key Features
 
-- **⚡️ Blended Workflow**: Seamlessly switch between accepting suggestions (`J` / `Shift+Enter`) and manual typing/correction.
+- **⚡️ Blended Workflow**: Seamlessly switch between accepting suggestions (`Shift+Enter`) and manual typing/correction.
 - **🧠 Active Learning**: The system learns from your labels in real-time, refining its neighbor search to present the most relevant next samples.
-- **⏮️ History & Correction**: Made a mistake? Hit `Alt + Left` to step back in time, correct a label, and watch the embedding map update instantly.
+- **⏮️ History & Correction**: Made a mistake? Hit `Shift + Left` to step back in time, correct a label, and watch the embedding map update instantly.
 - **🎨 Modern UI**: A dark-themed, glassmorphism-inspired interface built for long sessions without eye strain.
 - **🗺️ Embedding Map**: Interactive WebGL scatter plot (`regl-scatterplot`) visualizing 1000s of data points.
+- **🧪 Simulation Engine**: Built-in benchmarking to compare labeling strategies (Random vs. Uncertainty vs. Cluster Chain).
 
 ## Getting Started
 
 *   [**Usage Guide**](usage.md): Master the shortcuts and workflow.
 *   [**Product Design**](product_design.md): Understand the "Flow State" philosophy and design decisions.
+*   [**Simulation & Benchmarking**](simulation.md): Run experiments to optimize your labeling strategy.
 *   [**Architecture**](architecture.md): Deep dive into the technical stack (FastAPI, Qdrant, React, Modal).
+*   [**Roadmap**](roadmap.md): Future plans for VLM integration and Rust pipelines.
 *   [**API Reference**](api.md): Backend API documentation.

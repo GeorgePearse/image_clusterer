@@ -79,6 +79,8 @@ The backend manages the ML pipeline, vector search, and serves the API.
 |------|---------|
 | `main.py` | FastAPI application, endpoints, and orchestration |
 | `common.py` | Shared models, dataset wrapper, configuration |
+| `oracle.py` | Active Learning strategies (Random, Uncertainty, etc.) |
+| `simulation.py` | Benchmarking framework for strategies |
 | `modal_ops.py` | Optional GPU training via Modal |
 
 **Core Classes:**

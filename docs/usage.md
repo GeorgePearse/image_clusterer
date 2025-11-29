@@ -39,7 +39,23 @@ QuickSort is built for keyboard-first usage. Master these shortcuts to reach max
 | **Submit Label** | `Enter` | Input mode |
 | **Autocomplete Select** | `Up` / `Down` Arrows | Input mode |
 | **Autocomplete Fill** | `Tab` | Input mode |
+| **Quick Select** | `1` - `9` | Select suggestion 1-9 immediately |
 | **History Back** | `Shift + Left` | Global |
 | **History Forward** | `Shift + Right` | Global |
 | **Toggle Scatter Plot** | Click Icon | UI Toolbar |
 | **Toggle Logs** | Click Icon | UI Toolbar |
+| **Toggle Simulation** | Click Icon | UI Toolbar |
+
+## Advanced Controls
+
+### Strategy Selection
+In the top header, you can switch the active learning strategy using the **Strategy Dropdown** (Lightning icon).
+*   **Cluster Chain**: Default. Prioritizes consistency and speed (stay in the same class).
+*   **Uncertainty**: Selects images the model is least sure about. Good for boundary refinement.
+*   **Random**: Pure random sampling. Good for initial exploration or benchmarking.
+
+### Simulation View
+Click the **Bar Chart** icon in the header to open the Simulation View.
+*   Run background simulations to compare strategies.
+*   Visualize model accuracy improvement over time.
+*   See the impact of "Flow State" logic vs pure information gain.
