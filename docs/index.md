@@ -22,4 +22,7 @@ QuickSort is designed to minimize friction. Traditional labelling tools are clic
 
 ## Getting Started
 
-Check out the [Usage Guide](usage.md) to master the keyboard shortcuts, or dive into the [Architecture](architecture.md) to understand how it works under the hood.
+*   [**Usage Guide**](usage.md): Master the shortcuts and workflow.
+*   [**Product Design**](product_design.md): Understand the "Flow State" philosophy and design decisions.
+*   [**Architecture**](architecture.md): Deep dive into the technical stack (FastAPI, Qdrant, React, Modal).
+*   [**API Reference**](api.md): Backend API documentation.
