@@ -24,6 +24,7 @@ nav:
   - Architecture: architecture.md
   - API: api.md
   - Usage: usage.md
+  - Roadmap: roadmap.md
 
 markdown_extensions:
   - admonition

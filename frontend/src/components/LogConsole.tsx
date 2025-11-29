@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 import { WS_URL } from '../api';
 
 export const LogConsole: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
-  const [isOpen, setIsOpen] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -13,7 +13,7 @@ export const LogConsole: React.FC = () => {
       const ws = new WebSocket(WS_URL);
       
       ws.onopen = () => {
-        setLogs(prev => [...prev, "--- System Logs Connected ---"]);
+        setLogs(prev => [...prev, "System connected."]);
       };
 
       ws.onmessage = (event) => {
@@ -21,7 +21,6 @@ export const LogConsole: React.FC = () => {
       };
 
       ws.onclose = () => {
-        // Try reconnect in 2s
         setTimeout(connect, 2000);
       };
 
@@ -36,36 +35,31 @@ export const LogConsole: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isOpen && logsEndRef.current) {
-      // Use scrollTop instead of scrollIntoView to prevent layout jitter
-      const parent = logsEndRef.current.parentElement;
-      if (parent) {
-        parent.scrollTop = parent.scrollHeight;
-      }
+    // Scroll to bottom logic
+    // With ScrollArea we might need to target the viewport or just use simple div scrolling if ScrollArea is complex to control programmatically without refs to viewport.
+    // Standard ScrollArea from shadcn exposes viewport via context or refs? 
+    // Actually, simply putting a div at the end and scrolling it into view works if the container is scrollable.
+    // But Shadcn ScrollArea wraps content in a Viewport.
+    if (logsEndRef.current) {
+        logsEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [logs, isOpen]);
+  }, [logs]);
 
   return (
-    <div className="bg-[#111] text-green-400 font-mono text-xs h-full flex flex-col border-l border-[#333]">
-      <div 
-        className="flex items-center justify-between p-3 h-10 bg-[#1a1a1a] border-b border-[#333]"
-      >
-        <div className="flex items-center gap-2 overflow-hidden">
-          <Terminal size={14} className="flex-shrink-0 text-gray-400" />
-          <span className="font-semibold whitespace-nowrap text-gray-300">System Logs</span>
-          <span className="bg-[#333] text-gray-300 px-1.5 rounded text-[10px] min-w-[20px] text-center">{logs.length}</span>
-        </div>
-      </div>
-      
-      <div className="p-3 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+    <ScrollArea className="h-full w-full bg-card text-muted-foreground font-mono text-[10px]">
+      <div className="p-4 space-y-1.5">
           {logs.map((log, i) => (
-            <div key={i} className="mb-1.5 whitespace-pre-wrap font-mono opacity-80 border-b border-gray-800/50 pb-1 break-words leading-relaxed text-[11px]">
-              <span className="text-gray-500 mr-2">[{new Date().toLocaleTimeString()}]</span>
-              {log}
+            <div key={i} className="whitespace-pre-wrap break-words border-b border-border/50 pb-1 last:border-0 hover:text-foreground transition-colors">
+              <span className="text-muted-foreground/60 mr-2 select-none">[{new Date().toLocaleTimeString([], {hour12: false})}]</span>
+              <span className={cn(
+                  log.includes("Error") && "text-destructive",
+                  log.includes("connected") && "text-green-500",
+                  !log.includes("Error") && !log.includes("connected") && "text-foreground/80"
+              )}>{log}</span>
             </div>
           ))}
           <div ref={logsEndRef} />
       </div>
-    </div>
+    </ScrollArea>
   );
 };

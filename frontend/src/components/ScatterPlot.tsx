@@ -54,10 +54,12 @@ export function ScatterPlot({ points, currentImageId, onPointClick }: ScatterPlo
 
     scatterplotRef.current = scatterplot;
 
+    // @ts-ignore
     scatterplot.subscribe('pointover', () => {
       canvas.style.cursor = 'crosshair';
     });
     
+    // @ts-ignore
     scatterplot.subscribe('pointout', () => {
       canvas.style.cursor = 'default';
     });
