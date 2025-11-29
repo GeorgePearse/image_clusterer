@@ -133,11 +133,11 @@ qdrant.recreate_collection(
 - Neighbor label distribution generates suggestions
 - Re-indexed when model updates
 
-### Dimensionality Reduction ([Squeeze](https://github.com/wseaton/squeeze))
+### Dimensionality Reduction ([Squeeze](https://github.com/GeorgePearse/squeeze))
 
 **Location:** `external/squeeze/`
 
-[Squeeze](https://github.com/wseaton/squeeze) is a high-performance UMAP implementation used to project 64D embeddings to 2D for visualization.
+[Squeeze](https://github.com/GeorgePearse/squeeze) is a high-performance UMAP implementation used to project 64D embeddings to 2D for visualization.
 
 ```python
 # Projection (main.py:228-229)
@@ -313,5 +313,5 @@ Runtime configuration in `backend/app/main.py`:
 | API | [FastAPI](https://github.com/tiangolo/fastapi) | Async Python web framework |
 | ML Framework | [PyTorch](https://github.com/pytorch/pytorch) | Neural network training |
 | Vector DB | [Qdrant](https://github.com/qdrant/qdrant) | Similarity search |
-| Dim. Reduction | [Squeeze](https://github.com/wseaton/squeeze) (UMAP) | 2D projection |
+| Dim. Reduction | [Squeeze](https://github.com/GeorgePearse/squeeze) (UMAP) | 2D projection |
 | GPU Compute | [Modal](https://github.com/modal-labs/modal-client) (optional) | Serverless GPU training |
