@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+qdrant-client
+torch
+torchvision
+pillow
+numpy
+scikit-learn
+python-multipart
+pytorch-metric-learning

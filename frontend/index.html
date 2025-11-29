@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extreme Classification Sorter</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-weight: 300;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .image-pair {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            justify-content: center;
+        }
+        .image-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        img {
+            width: 200px;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 2px solid #eee;
+            image-rendering: pixelated; /* Since we are using small synthetic images */
+        }
+        .buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+            font-weight: 600;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-yes {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-no {
+            background-color: #f44336;
+            color: white;
+        }
+        .status {
+            margin-top: 15px;
+            color: #666;
+            font-size: 0.9em;
+            height: 20px;
+        }
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Are these similar?</h1>
+        
+        <div class="image-pair" id="imagePair">
+            <div class="image-card">
+                <img id="img1" src="" alt="Image 1">
+            </div>
+            <div class="image-card">
+                <img id="img2" src="" alt="Image 2">
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-yes" onclick="vote(true)">YES (Same)</button>
+            <button class="btn-no" onclick="vote(false)">NO (Different)</button>
+        </div>
+
+        <div class="status" id="statusText">Loading...</div>
+    </div>
+
+    <script>
+        const API_URL = "";
+        let currentPair = null;
+
+        async function fetchPair() {
+            setLoading(true);
+            try {
+                const response = await fetch(`${API_URL}/pair`);
+                const data = await response.json();
+                currentPair = data;
+                
+                document.getElementById('img1').src = `data:image/png;base64,${data.image1.data}`;
+                document.getElementById('img2').src = `data:image/png;base64,${data.image2.data}`;
+                
+                document.getElementById('statusText').textContent = `Strategy: ${data.debug_strategy || 'unknown'}`;
+            } catch (error) {
+                console.error("Error fetching pair:", error);
+                document.getElementById('statusText').textContent = "Error connecting to backend.";
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function vote(isSame) {
+            if (!currentPair) return;
+            
+            setLoading(true);
+            try {
+                const payload = {
+                    id1: currentPair.image1.id,
+                    id2: currentPair.image2.id,
+                    are_same: isSame
+                };
+
+                const response = await fetch(`${API_URL}/vote`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                console.log("Vote result:", result);
+                
+                // Fetch next pair immediately
+                await fetchPair();
+            } catch (error) {
+                console.error("Error voting:", error);
+                document.getElementById('statusText').textContent = "Error sending vote.";
+                setLoading(false);
+            }
+        }
+
+        function setLoading(isLoading) {
+            const container = document.querySelector('.container');
+            if (isLoading) {
+                container.classList.add('loading');
+            } else {
+                container.classList.remove('loading');
+            }
+        }
+
+        // Initial load
+        fetchPair();
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (document.querySelector('.container').classList.contains('loading')) return;
+            
+            if (e.key === 'y' || e.key === 'Y' || e.key === 'ArrowLeft') {
+                vote(true);
+            } else if (e.key === 'n' || e.key === 'N' || e.key === 'ArrowRight') {
+                vote(false);
+            }
+        });
+    </script>
+</body>
+</html>
