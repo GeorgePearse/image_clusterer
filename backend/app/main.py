@@ -1,16 +1,8 @@
-import uuid
-import io
-import base64
-import random
 import os
-import json
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torchvision import transforms
-from PIL import Image
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -60,7 +52,7 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
-            except:
+            except Exception:
                 pass
 
 
@@ -85,10 +77,8 @@ ws_handler.setFormatter(formatter)
 logging.getLogger().addHandler(ws_handler)
 logging.getLogger("uvicorn").addHandler(ws_handler)
 
-from collections import Counter
-
-import sys
-import os
+from collections import Counter  # noqa: E402
+import sys  # noqa: E402
 
 # Add external/squeeze to python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -97,7 +87,7 @@ squeeze_path = os.path.join(project_root, "external/squeeze")
 if squeeze_path not in sys.path:
     sys.path.append(squeeze_path)
 
-import squeeze
+import squeeze  # noqa: E402
 
 # --- State ---
 accumulated_loss = 0.0
@@ -130,12 +120,11 @@ if os.path.exists(MODEL_PATH):
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 qdrant = QdrantClient(path=QDRANT_PATH)
-collections = qdrant.get_collections().collections
-if not any(c.name == COLLECTION_NAME for c in collections):
-    qdrant.recreate_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
-    )
+# Always recreate collection since dataset is ephemeral (UUIDs change on restart)
+qdrant.recreate_collection(
+    collection_name=COLLECTION_NAME,
+    vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
+)
 
 # --- Helper Functions ---
 

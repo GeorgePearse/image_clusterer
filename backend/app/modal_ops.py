@@ -4,7 +4,6 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
-import os
 
 # Define the Modal App
 app = modal.App("image-clusterer")
@@ -28,8 +27,6 @@ def train_and_reindex(
     model_state, feedback_buffer, label_buffer, all_images_tensor, image_ids
 ):
     # Setup path for imports inside the container
-    import sys
-    import os
 
     if "/root" not in sys.path:
         sys.path.append("/root")

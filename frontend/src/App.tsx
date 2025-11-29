@@ -22,7 +22,7 @@ function App() {
   const [viewIndex, setViewIndex] = useState(0);
 
   const [inputValue, setInputValue] = useState("");
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
   
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -68,7 +68,7 @@ function App() {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }, []);
 
@@ -201,6 +201,7 @@ function App() {
       
       {/* Sidebar / Scatter Plot */}
       <div 
+        data-testid="sidebar"
         className={cn(
           "relative flex flex-col border-r bg-background/50 backdrop-blur-xl transition-all duration-500 ease-out z-20",
           showScatter ? 'w-[400px]' : 'w-0 border-none'
@@ -238,6 +239,7 @@ function App() {
              <Button
                 variant="ghost" 
                 size="icon"
+                title="Toggle Scatter Plot"
                 onClick={() => setShowScatter(!showScatter)}
                 className={cn("text-muted-foreground hover:text-foreground", showScatter && "bg-accent text-accent-foreground")}
              >
@@ -269,6 +271,7 @@ function App() {
              <Button 
                 variant="ghost"
                 size="icon"
+                title="Toggle Logs"
                 onClick={() => setShowLogs(!showLogs)}
                 className={cn("text-muted-foreground hover:text-foreground", showLogs && "bg-accent text-accent-foreground")}
              >

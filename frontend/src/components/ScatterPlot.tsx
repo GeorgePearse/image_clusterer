@@ -32,7 +32,7 @@ const LABEL_COLORS: Record<string, [number, number, number, number]> = {
 const UNLABELLED_COLOR: [number, number, number, number] = [0.5, 0.5, 0.5, 0.5];
 const CURRENT_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]; // Bright White
 
-export function ScatterPlot({ points, currentImageId, onPointClick }: ScatterPlotProps) {
+export function ScatterPlot({ points, currentImageId, onPointClick: _onPointClick }: ScatterPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scatterplotRef = useRef<any>(null);
 

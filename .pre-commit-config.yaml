@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.7
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: zuban
+        name: zuban
+        entry: zuban check
+        language: system
+        types: [python]
+        files: ^backend/
+
+      - id: oxlint
+        name: oxlint
+        entry: npx oxlint
+        language: node
+        files: \.(js|ts|jsx|tsx)$
+        additional_dependencies: ['oxlint']
