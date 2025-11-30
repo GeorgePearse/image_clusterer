@@ -30,11 +30,18 @@ QuickSort is built for keyboard-first usage. Master these shortcuts to reach max
 *   **Correct Mistake**: Type the new label and press `Enter`.
 *   **Navigate Forward**: Press **`Shift + Right Arrow`** to return to the live queue.
 
+### Skip / "Don't Know"
+*   **Quick Skip**: Press **`Shift + ?`** to mark an image as "don't know".
+*   **Purpose**: Creates a queue of ambiguous images for later review.
+*   **Behavior**: Images marked "don't know" are stored but **never** suggested as predictions. The system won't offer "don't know" as an AI suggestion, keeping your flow state intact.
+*   **Review Later**: Use history navigation (`Shift + Left/Right`) to revisit and re-label skipped images when you have more context.
+
 ## Keyboard Shortcuts Cheat Sheet
 
 | Action | Shortcut | Context |
 | :--- | :--- | :--- |
 | **Accept Suggestion** | `Shift + Enter` | When suggestion is visible |
+| **Skip / Don't Know** | `Shift + ?` | Global |
 | **Reject Suggestion** | `I` | Focus input to correct |
 | **Submit Label** | `Enter` | Input mode |
 | **Autocomplete Select** | `Up` / `Down` Arrows | Input mode |

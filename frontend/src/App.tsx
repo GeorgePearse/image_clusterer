@@ -12,8 +12,11 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 const CLASSES = [
-  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "don't know"
 ];
+
+// Labels that should never be offered as predictions/suggestions
+const EXCLUDED_FROM_PREDICTIONS = ["don't know"];
 
 // Resize Handle Component
 function ResizeHandle({ onResize, side }: { onResize: (delta: number) => void; side: 'left' | 'right' }) {
@@ -339,9 +342,16 @@ function App() {
           return;
       }
 
+      // Shift+? to mark as "don't know" (for later review)
+      if (e.shiftKey && e.key === '?') {
+        e.preventDefault();
+        handleLabel("don't know");
+        return;
+      }
+
       if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
-        
+
         if (isViewingHistory) {
              const selected = suggestions[selectedIndex];
              const val = selected || inputValue.trim();
@@ -353,7 +363,7 @@ function App() {
             handleLabel(sample!.suggestion!);
             return;
         }
-        
+
         const selected = suggestions[selectedIndex];
         const val = selected || inputValue.trim();
         if (val) {
@@ -766,6 +776,13 @@ function App() {
                                     <kbd className="bg-muted px-1.5 py-0.5 rounded border font-sans">Enter</kbd>
                                 </div>
                                 <span>Accept</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
+                                <div className="flex gap-1">
+                                    <kbd className="bg-muted px-1.5 py-0.5 rounded border font-sans">Shift</kbd>
+                                    <kbd className="bg-muted px-1.5 py-0.5 rounded border font-sans">?</kbd>
+                                </div>
+                                <span>Skip</span>
                             </div>
                         </div>
 

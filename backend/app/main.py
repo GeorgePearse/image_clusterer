@@ -115,6 +115,9 @@ label_buffer = []
 cached_points = []
 last_labeled_id = None
 
+# Labels that should never be offered as predictions/suggestions
+EXCLUDED_LABELS = {"don't know"}
+
 # Startup status tracking
 startup_status = {
     "ready": False,
@@ -296,25 +299,35 @@ def compute_predictions_for_points(points_list):
 
             if neighbor_labels:
                 # Compute weighted vote (closer neighbors have more weight)
+                # Filter out excluded labels (like "don't know")
                 label_weights = {}
                 for label, score in zip(neighbor_labels, neighbor_scores):
-                    label_weights[label] = label_weights.get(label, 0) + score
+                    if label not in EXCLUDED_LABELS:
+                        label_weights[label] = label_weights.get(label, 0) + score
 
-                # Get prediction and confidence
-                predicted_label = max(label_weights, key=label_weights.get)
-                total_weight = sum(label_weights.values())
-                confidence = label_weights[predicted_label] / total_weight if total_weight > 0 else 0
+                if label_weights:
+                    # Get prediction and confidence
+                    predicted_label = max(label_weights, key=label_weights.get)
+                    total_weight = sum(label_weights.values())
+                    confidence = label_weights[predicted_label] / total_weight if total_weight > 0 else 0
 
-                # Scale confidence: also consider how many labeled neighbors we found
-                # More labeled neighbors = more confident
-                coverage = min(len(neighbor_labels) / 5, 1.0)  # Cap at 5 neighbors
-                confidence = confidence * coverage
+                    # Scale confidence: also consider how many labeled neighbors we found
+                    # More labeled neighbors = more confident
+                    coverage = min(len(neighbor_labels) / 5, 1.0)  # Cap at 5 neighbors
+                    confidence = confidence * coverage
 
-                updated_points.append({
-                    **point,
-                    "predicted_label": predicted_label,
-                    "confidence": round(confidence, 3)
-                })
+                    updated_points.append({
+                        **point,
+                        "predicted_label": predicted_label,
+                        "confidence": round(confidence, 3)
+                    })
+                else:
+                    # All neighbors were excluded labels
+                    updated_points.append({
+                        **point,
+                        "predicted_label": None,
+                        "confidence": 0
+                    })
             else:
                 # No labeled neighbors nearby
                 updated_points.append({
@@ -543,15 +556,17 @@ def get_next_sample():
         collection_name=COLLECTION_NAME, query=emb1, limit=knn_config["k_neighbors"]
     ).points
 
-    # 5. Check neighbors for labels
+    # 5. Check neighbors for labels (excluding "don't know" and similar)
     neighbor_labels = []
     for h in hits:
         if h.id == candidate_id:
             continue
         if h.id in dataset.user_labels:
-            neighbor_labels.append(dataset.user_labels[h.id])
+            label = dataset.user_labels[h.id]
+            if label not in EXCLUDED_LABELS:
+                neighbor_labels.append(label)
 
-    # 6. Suggestion
+    # 6. Suggestion (only from valid labels)
     suggestion = None
     sorted_suggestions = []
     if neighbor_labels:
