@@ -18,6 +18,55 @@ const CLASSES = [
 // Labels that should never be offered as predictions/suggestions
 const EXCLUDED_FROM_PREDICTIONS = ["don't know"];
 
+// Levenshtein distance for fuzzy matching
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b[i - 1] === a[j - 1]) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+// Find closest matching class (fuzzy match)
+function findClosestClass(input: string): string | null {
+  const normalizedInput = input.toLowerCase().trim();
+
+  // Exact match first
+  const exactMatch = CLASSES.find(c => c.toLowerCase() === normalizedInput);
+  if (exactMatch) return exactMatch;
+
+  // Find closest match using Levenshtein distance
+  let bestMatch: string | null = null;
+  let bestDistance = Infinity;
+
+  for (const cls of CLASSES) {
+    const distance = levenshteinDistance(normalizedInput, cls.toLowerCase());
+    // Only accept if distance is <= 2 (allows for small typos like "siz" -> "six")
+    if (distance < bestDistance && distance <= 2) {
+      bestDistance = distance;
+      bestMatch = cls;
+    }
+  }
+
+  return bestMatch;
+}
+
 // Resize Handle Component
 function ResizeHandle({ onResize, side }: { onResize: (delta: number) => void; side: 'left' | 'right' }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -300,9 +349,24 @@ function App() {
   const onInputSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const selected = suggestions[selectedIndex];
-    const valueToSubmit = selected || inputValue.trim();
-    if (!valueToSubmit) return;
-    handleLabel(valueToSubmit);
+    const rawValue = selected || inputValue.trim();
+    if (!rawValue) return;
+
+    // Validate/fuzzy-match to an allowed class
+    const validatedLabel = findClosestClass(rawValue);
+    if (!validatedLabel) {
+      // No valid match found - don't submit, shake the input or show error
+      inputRef.current?.classList.add('animate-shake');
+      setTimeout(() => inputRef.current?.classList.remove('animate-shake'), 500);
+      return;
+    }
+
+    // If it was corrected, update the input to show what was actually submitted
+    if (validatedLabel.toLowerCase() !== rawValue.toLowerCase()) {
+      setInputValue(validatedLabel);
+    }
+
+    handleLabel(validatedLabel);
   };
 
   const onInputKeyDown = (e: React.KeyboardEvent) => {
