@@ -1,4 +1,4 @@
-# QuickSort
+# Rush
 
 **Label 10,000 images in an afternoon.**
 
