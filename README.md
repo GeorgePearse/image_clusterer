@@ -4,6 +4,8 @@
 
 QuickSort is an extreme-speed image labeling tool that turns data annotation from a tedious chore into a flow state experience. Using active learning and the "Chain Reaction" strategy, you can achieve 10x faster labeling throughput compared to traditional random sampling.
 
+Active Learning research is in a bad state, it tends to be completely ignore how difficult examples impact annotator response times, rush addresses this by directly measuring and optimising improvement per time, instead of improvement per edit.
+
 <img width="1461" height="744" alt="image" src="https://github.com/user-attachments/assets/dab57321-d65f-43dc-886f-9ad5e4f078d1" />
 
 ## The Problem
